@@ -115,3 +115,17 @@ func defaultValueByType(p reflect.Type, lit string) (interface{}, error) {
 
 	return v, err
 }
+
+func newPrototype(p reflect.Type) interface{} {
+	elem := false
+	if p.Kind() == reflect.Ptr {
+		p = p.Elem()
+	} else {
+		elem = true
+	}
+	v := reflect.New(p)
+	if elem {
+		v = v.Elem()
+	}
+	return v.Interface()
+}

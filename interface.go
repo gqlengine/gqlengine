@@ -34,11 +34,7 @@ func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*gr
 	}
 
 	if prototype == nil {
-		pv := reflect.New(structType)
-		if baseType.Kind() != reflect.Ptr {
-			pv = pv.Elem()
-		}
-		prototype = pv.Interface().(Interface)
+		prototype = newPrototype(baseType).(Interface)
 	}
 
 	name := structType.Name()

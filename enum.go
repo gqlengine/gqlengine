@@ -30,15 +30,7 @@ func (engine *Engine) collectEnum(baseType reflect.Type) graphql.Type {
 	if d, ok := engine.types[baseType]; ok {
 		return d
 	}
-	typ := baseType
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-	v := reflect.New(typ)
-	if baseType.Kind() != reflect.Ptr {
-		v = v.Elem()
-	}
-	enum := v.Interface().(Enum)
+	enum := newPrototype(baseType).(Enum)
 
 	values := graphql.EnumValueConfigMap{}
 	for valName, def := range enum.GraphQLEnumValues() {
@@ -48,7 +40,10 @@ func (engine *Engine) collectEnum(baseType reflect.Type) graphql.Type {
 		}
 	}
 
-	name := typ.Name()
+	name := baseType.Name()
+	if baseType.Kind() == reflect.Ptr {
+		name = baseType.Elem().Name()
+	}
 	if rename, ok := enum.(NameAlterableEnum); ok {
 		name = rename.GraphQLEnumName()
 	}

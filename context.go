@@ -82,8 +82,7 @@ func (engine *Engine) handleRequestContexts(r *http.Request) (context.Context, e
 	ctx := r.Context()
 	var errs []error
 	for reqCtxType := range engine.reqCtx {
-		reqCtx := reflect.New(reqCtxType)
-		req := reqCtx.Interface().(RequestContext)
+		req := newPrototype(reqCtxType).(RequestContext)
 		err := req.GraphQLContextFromHTTPRequest(r)
 		if err != nil {
 			errs = append(errs, err)
@@ -108,8 +107,7 @@ func (engine *Engine) handleFastHttpRequestContexts(r *fasthttp.RequestCtx) (con
 	var ctx context.Context = r
 	var errs []error
 	for reqCtxType := range engine.reqCtx {
-		reqCtx := reflect.New(reqCtxType)
-		req := reqCtx.Interface().(FastRequestContext)
+		req := newPrototype(reqCtxType).(FastRequestContext)
 		err := req.GraphQLContextFromFastHTTPRequest(r)
 		if err != nil {
 			errs = append(errs, err)

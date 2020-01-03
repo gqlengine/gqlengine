@@ -67,12 +67,7 @@ func (engine *Engine) collectInput(baseType reflect.Type) graphql.Type {
 		}
 	}
 
-	v := reflect.New(structType)
-	if baseType.Kind() != reflect.Ptr {
-		v = v.Elem()
-	}
-	input := v.Interface().(Input)
-
+	input := newPrototype(baseType).(Input)
 	name := structType.Name()
 	if rename, ok := input.(NameAlterableInput); ok {
 		name = rename.GraphQLInputName()

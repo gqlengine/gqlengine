@@ -126,11 +126,7 @@ func (engine *Engine) collectObject(baseType reflect.Type) graphql.Type {
 		structType = baseType.Elem()
 	}
 
-	prototypeVal := reflect.New(structType)
-	if baseType.Kind() != reflect.Ptr {
-		prototypeVal = prototypeVal.Elem()
-	}
-	prototype := prototypeVal.Interface().(Object)
+	prototype := newPrototype(structType).(Object)
 
 	name := structType.Name()
 	if rename, ok := prototype.(NameAlterableObject); ok {

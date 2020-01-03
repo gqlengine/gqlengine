@@ -31,19 +31,12 @@ func (engine *Engine) collectCustomScalar(baseType reflect.Type) graphql.Type {
 		return s
 	}
 
-	rawType := baseType
+	scalar := newPrototype(baseType).(Scalar)
+
+	name := baseType.Name()
 	if baseType.Kind() == reflect.Ptr {
-		rawType = baseType.Elem()
+		name = baseType.Elem().Name()
 	}
-
-	v := reflect.New(rawType)
-	if baseType.Kind() != reflect.Ptr {
-		v = v.Elem()
-	}
-
-	scalar := v.Interface().(Scalar)
-
-	name := rawType.Name()
 	if v, ok := scalar.(NameAlterableScalar); ok {
 		name = v.GraphQLScalarName()
 	}
