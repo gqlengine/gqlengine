@@ -4,7 +4,7 @@ package main
 import (
 	"net/http"
 
-	"git.karfield.com/karfield/gqlengine"
+	"github.com/gqlengine/gqlengine"
 )
 
 type ID int
