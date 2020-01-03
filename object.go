@@ -96,23 +96,22 @@ type objectFieldLazyConfig struct {
 }
 
 func (c *objectFieldLazyConfig) getFields(obj reflect.Type, engine *Engine) graphql.FieldsThunk {
-	fields := graphql.Fields{}
-	for name, config := range c.fields {
-		f := &graphql.Field{
-			Name:              config.name,
-			Description:       config.desc,
-			Type:              config.typ,
-			DeprecationReason: config.deprecated,
-		}
-		if config.needBeResolved {
-			if resolvers, ok := engine.objResolvers[obj]; ok {
-				f.Resolve = resolvers[name]
-			}
-		}
-		fields[name] = f
-	}
-	// lookup resolvers for each field
 	return func() graphql.Fields {
+		fields := graphql.Fields{}
+		for name, config := range c.fields {
+			f := &graphql.Field{
+				Name:              config.name,
+				Description:       config.desc,
+				Type:              config.typ,
+				DeprecationReason: config.deprecated,
+			}
+			if config.needBeResolved {
+				if resolvers, ok := engine.objResolvers[obj]; ok {
+					f.Resolve = resolvers[name]
+				}
+			}
+			fields[name] = f
+		}
 		return fields
 	}
 }

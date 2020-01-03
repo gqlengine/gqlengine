@@ -25,7 +25,10 @@ func (b *Baby) GraphQLObjectDescription() string {
 func main() {
 	app := gqlengine.NewEngine()
 	err := app.AddQuery("getBaby", "get baby", func() (*Baby, error) {
-		return &Baby{}, nil
+		return &Baby{
+			ID:   ID(1),
+			Name: "miller",
+		}, nil
 	})
 	if err != nil {
 		panic(err)

@@ -162,7 +162,7 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 		}
 	}
 
-	resolveFnValue := reflect.ValueOf(resolveFn)
+	resolveFnValue := reflect.ValueOf(resolve)
 	resolver.fn = func(p graphql.ResolveParams) (result interface{}, ctx context.Context, err error) {
 		args := make([]reflect.Value, len(argumentBuilders))
 		for i, ab := range argumentBuilders {
@@ -181,7 +181,9 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 			case returnContext:
 				ctx = context.WithValue(ctx, r.Type(), r.Interface())
 			case returnError:
-				err = r.Interface().(error)
+				if !r.IsNil() {
+					err = r.Interface().(error)
+				}
 			}
 		}
 		return

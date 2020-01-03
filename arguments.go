@@ -19,8 +19,19 @@ type argumentsBuilder struct {
 }
 
 func (a argumentsBuilder) build(params graphql.ResolveParams) (interface{}, error) {
-	val := reflect.New(a.typ)
-	err := mapstructure.Decode(params.Args, val.Interface())
+	typ := a.typ
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	val := reflect.New(typ)
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           val.Interface(),
+		WeaklyTypedInput: true,
+		TagName:          "json",
+	})
+	if err == nil {
+		err = decoder.Decode(params.Args)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal arguments failed: %E", err)
 	}
