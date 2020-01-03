@@ -3,20 +3,38 @@ package main
 import (
 	"net/http"
 
-	"github.com/karfield/gqlengine"
+	"github.com/gqlengine/gqlengine"
 )
 
 type ID int
 
 func (id ID) GraphQLID() {}
 
-type Baby struct {
-	ID   ID     `json:"id" gqlDesc:"ID"`
-	Name string `json:"name" gqlDesc:"Name"`
+type Gender int
+
+func (g Gender) GraphQLEnumDescription() string {
+	return "baby gender"
 }
 
-func (b *Baby) GraphQLArguments() {
+func (g Gender) GraphQLEnumValues() gqlengine.EnumValueMapping {
+	return gqlengine.EnumValueMapping{
+		"Female": {Female, "female"},
+		"Male":   {Male, "male"},
+	}
 }
+
+const (
+	Female Gender = 0
+	Male   Gender = 1
+)
+
+type Baby struct {
+	ID     ID     `json:"id" gqlDesc:"ID"`
+	Name   string `json:"name" gqlDesc:"Name"`
+	Gender Gender `json:"gender"`
+}
+
+func (b *Baby) GraphQLArguments() {}
 
 func (b *Baby) GraphQLObjectDescription() string {
 	return "baby object"
@@ -26,8 +44,9 @@ func main() {
 	app := gqlengine.NewEngine()
 	err := app.AddQuery("getBaby", "get baby", func() (*Baby, error) {
 		return &Baby{
-			ID:   ID(1),
-			Name: "miller",
+			ID:     ID(1),
+			Name:   "miller",
+			Gender: Male,
 		}, nil
 	})
 	if err != nil {

@@ -1,4 +1,4 @@
-module github.com/karfield/gqlengine
+module github.com/gqlengine/gqlengine
 
 go 1.13
 
