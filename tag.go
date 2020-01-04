@@ -11,8 +11,11 @@ import (
 
 func isRequired(field *reflect.StructField) bool {
 	v, ok := field.Tag.Lookup("gqlRequired")
-	if !ok || v == "" {
+	if !ok {
 		return false
+	}
+	if v == "" {
+		return true
 	}
 	required, err := strconv.ParseBool(v)
 	if err != nil {
@@ -30,6 +33,21 @@ func defaultValue(field *reflect.StructField) (interface{}, error) {
 		return defaultValueByType(field.Type, v)
 	}
 	return nil, nil
+}
+
+func isIgnored(field *reflect.StructField) bool {
+	v, ok := field.Tag.Lookup("gqlIgnored")
+	if !ok {
+		return false
+	}
+	if v == "" {
+		return true
+	}
+	ignored, err := strconv.ParseBool(v)
+	if err != nil {
+		return false
+	}
+	return ignored
 }
 
 func fieldName(field *reflect.StructField) string {

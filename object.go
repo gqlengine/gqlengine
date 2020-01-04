@@ -42,6 +42,10 @@ func (engine *Engine) objectFields(structType reflect.Type, config *objectFieldL
 	for i := 0; i < structType.NumField(); i++ {
 		f := structType.Field(i)
 
+		if isIgnored(&f) {
+			continue
+		}
+
 		if f.Anonymous {
 			// embedded
 			embeddedType, isArray, _ := unwrap(f.Type)
