@@ -45,10 +45,13 @@ func (engine *Engine) Init() (err error) {
 
 	engine.finalizeObjectResolvers()
 
+	tracing := &tracingExtension{}
+
 	engine.schema, err = graphql.NewSchema(graphql.SchemaConfig{
 		Query:        engine.query,
 		Mutation:     engine.mutation,
 		Subscription: engine.subscription,
+		Extensions:   []graphql.Extension{tracing},
 	})
 	return
 }
