@@ -76,7 +76,8 @@ func (t *tracingExtension) ExecutionDidStart(ctx context.Context) (context.Conte
 	startTs := time.Now()
 	tracing.Execution.StartOffset = startTs.Sub(tracing.StartTime).Milliseconds()
 	return ctx, func(result *graphql.Result) {
-		tracing.Execution.Duration = time.Now().Sub(startTs).Milliseconds()
+		tracing.EndTime = time.Now()
+		tracing.Execution.Duration = tracing.EndTime.Sub(startTs).Milliseconds()
 	}
 }
 

@@ -31,7 +31,7 @@ func fixCors(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Options(w http.ResponseWriter, r *http.Request) {
+func HandleHTTPOptions(w http.ResponseWriter, r *http.Request) {
 	fixCors(w, r)
 	w.WriteHeader(http.StatusOK)
 }

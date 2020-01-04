@@ -42,7 +42,9 @@ func (b *Baby) GraphQLObjectDescription() string {
 }
 
 func main() {
-	app := gqlengine.NewEngine()
+	app := gqlengine.NewEngine(gqlengine.Options{
+		Tracing: true,
+	})
 	err := app.AddQuery("getBaby", "get baby", func() (*Baby, error) {
 		return &Baby{
 			ID:     ID(1),

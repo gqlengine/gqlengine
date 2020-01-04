@@ -11,6 +11,7 @@ import (
 
 type Engine struct {
 	initialized    bool
+	enableTracing  bool
 	schema         graphql.Schema
 	query          *graphql.Object
 	mutation       *graphql.Object
@@ -24,8 +25,13 @@ type Engine struct {
 	batchResolvers map[reflect.Type]objectResolvers
 }
 
-func NewEngine() *Engine {
+type Options struct {
+	Tracing bool
+}
+
+func NewEngine(options Options) *Engine {
 	engine := &Engine{
+		enableTracing:  options.Tracing,
 		types:          map[reflect.Type]graphql.Type{},
 		idTypes:        map[reflect.Type]struct{}{},
 		argConfigs:     map[reflect.Type]graphql.FieldConfigArgument{},
@@ -45,13 +51,16 @@ func (engine *Engine) Init() (err error) {
 
 	engine.finalizeObjectResolvers()
 
-	tracing := &tracingExtension{}
+	var extensions []graphql.Extension
+	if engine.enableTracing {
+		extensions = append(extensions, &tracingExtension{})
+	}
 
 	engine.schema, err = graphql.NewSchema(graphql.SchemaConfig{
 		Query:        engine.query,
 		Mutation:     engine.mutation,
 		Subscription: engine.subscription,
-		Extensions:   []graphql.Extension{tracing},
+		Extensions:   extensions,
 	})
 	return
 }
