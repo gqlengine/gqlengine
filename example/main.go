@@ -57,6 +57,12 @@ func main() {
 		return nil
 	})
 
+	app.AddPaginationQuery("getBabies", "get babies", func(pagination *gqlengine.Pagination) ([]*Baby, error) {
+		return nil, nil
+	}, func() (int, error) {
+		return 0, nil
+	})
+
 	err = app.Init()
 	if err != nil {
 		panic(err)

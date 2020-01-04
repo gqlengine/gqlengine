@@ -2,6 +2,7 @@
 package gqlengine
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 
@@ -166,6 +167,100 @@ func (engine *Engine) AddResolver(field string, resolve interface{}) error {
 			resolvers[field] = resolver.fn
 		}
 	}
+	return nil
+}
+
+func (engine *Engine) AddPaginationQuery(name, description string, resolveList, resolveTotal interface{}) error {
+	listResolver, err := engine.analysisResolver("", resolveList)
+	if err != nil {
+		return err
+	}
+	totalResolver, err := engine.analysisResolver("", resolveTotal)
+	if err != nil {
+		return err
+	}
+	//if listResolver.args != totalResolver.args {
+	//	return fmt.Errorf("total resolver arguments not match with list resolver")
+	//}
+	if listResolver.out.Kind() != reflect.Slice {
+		return fmt.Errorf("list resolver should return slice of results")
+	}
+	if totalResolver.out.Kind() != reflect.Int {
+		return fmt.Errorf("total resolver should return a int value")
+	}
+
+	argConfigs := engine.argConfigs[listResolver.args]
+
+	if engine.query == nil {
+		engine.query = graphql.NewObject(graphql.ObjectConfig{
+			Name:   "Query",
+			Fields: graphql.Fields{},
+		})
+	}
+
+	baseName := listResolver.outBaseType.Name()
+	if listResolver.outBaseType.Kind() == reflect.Ptr {
+		baseName = listResolver.outBaseType.Elem().Name()
+	}
+
+	paginationResults := graphql.NewObject(graphql.ObjectConfig{
+		Name:        baseName + "PaginationResults",
+		Description: "pagination results of " + baseName,
+		Fields: graphql.Fields{
+			"page": {
+				Description: "current page",
+				Type:        graphql.Int,
+			},
+			"total": {
+				Description: "total records",
+				Type:        graphql.Int,
+			},
+			"list": {
+				Description: "list of " + baseName,
+				Type:        graphql.NewList(engine.types[listResolver.outBaseType]),
+			},
+		},
+	})
+
+	engine.query.AddFieldConfig(name, &graphql.Field{
+		Description: description,
+		Args:        argConfigs,
+		Type:        paginationResults,
+		Resolve: graphql.ResolveFieldWithContext(func(p graphql.ResolveParams) (interface{}, context.Context, error) {
+			ctx := p.Context
+			args, err := listResolver.buildArgs(p)
+			if err != nil {
+				return nil, ctx, err
+			}
+			totalFnArgs := args
+			if totalResolver.args != listResolver.args {
+				totalFnArgs, err = totalResolver.buildArgs(p)
+				if err != nil {
+					return nil, ctx, err
+				}
+			}
+
+			pagination := getPaginationFromParams(p)
+
+			listResults := listResolver.fnPrototype.Call(args)
+			results, ctx, err := listResolver.buildResults(ctx, listResults)
+			if err != nil {
+				return nil, ctx, err
+			}
+
+			totalResults := totalResolver.fnPrototype.Call(totalFnArgs)
+			total, _, err := totalResolver.buildResults(ctx, totalResults)
+			if err != nil {
+				return nil, ctx, err
+			}
+
+			return map[string]interface{}{
+				"page":  pagination.Page,
+				"total": total,
+				"list":  results,
+			}, ctx, err
+		}),
+	})
 	return nil
 }
 

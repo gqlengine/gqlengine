@@ -19,10 +19,15 @@ type argumentsBuilder struct {
 	typ reflect.Type
 }
 
-func (a argumentsBuilder) build(params graphql.ResolveParams) (interface{}, error) {
-	val := newPrototype(a.typ)
+func unmarshalArguments(params graphql.ResolveParams, typ reflect.Type) (interface{}, error) {
+	requirePtr := false
+	if typ.Kind() == reflect.Ptr {
+		requirePtr = true
+		typ = typ.Elem()
+	}
+	val := reflect.New(typ)
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result:           val,
+		Result:           val.Interface(),
 		WeaklyTypedInput: true,
 		TagName:          "json",
 	})
@@ -32,7 +37,14 @@ func (a argumentsBuilder) build(params graphql.ResolveParams) (interface{}, erro
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal arguments failed: %E", err)
 	}
-	return val, nil
+	if !requirePtr {
+		return val.Elem().Interface(), nil
+	}
+	return val.Interface(), nil
+}
+
+func (a argumentsBuilder) build(params graphql.ResolveParams) (interface{}, error) {
+	return unmarshalArguments(params, a.typ)
 }
 
 func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) error {
@@ -96,6 +108,6 @@ func (engine *Engine) asArguments(arg reflect.Type) *argumentsBuilder {
 		panic(err)
 	}
 	return &argumentsBuilder{
-		typ: baseType,
+		typ: arg,
 	}
 }

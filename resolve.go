@@ -20,12 +20,48 @@ const (
 )
 
 type resolver struct {
-	fn          graphql.ResolveFieldWithContext
-	args        reflect.Type
-	source      reflect.Type
-	out         reflect.Type
-	outBaseType reflect.Type
-	isBatch     bool
+	fn             graphql.ResolveFieldWithContext
+	fnPrototype    reflect.Value
+	args           reflect.Type
+	argBuilders    []resolverArgumentBuilder
+	source         reflect.Type
+	out            reflect.Type
+	outBaseType    reflect.Type
+	resultBuilders []int
+	isBatch        bool
+}
+
+func (r resolver) buildArgs(p graphql.ResolveParams) ([]reflect.Value, error) {
+	args := make([]reflect.Value, len(r.argBuilders))
+	for i, ab := range r.argBuilders {
+		arg, err := ab.build(p)
+		if err != nil {
+			return nil, err
+		}
+		args[i] = reflect.ValueOf(arg)
+	}
+	return args, nil
+}
+
+func (r resolver) buildResults(ctx context.Context, outs []reflect.Value) (interface{}, context.Context, error) {
+	var (
+		result interface{}
+		err    error
+	)
+
+	for i, res := range outs {
+		switch r.resultBuilders[i] {
+		case returnResult:
+			result = res.Interface()
+		case returnContext:
+			ctx = context.WithValue(ctx, res.Type(), res.Interface())
+		case returnError:
+			if !res.IsNil() {
+				err = res.Interface().(error)
+			}
+		}
+	}
+	return result, ctx, err
 }
 
 func checkResultType(expected, actually reflect.Type) bool {
@@ -163,31 +199,17 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 		}
 	}
 
+	resolver.argBuilders = argumentBuilders
+	resolver.resultBuilders = returnTypes
 	resolveFnValue := reflect.ValueOf(resolve)
-	resolver.fn = func(p graphql.ResolveParams) (result interface{}, ctx context.Context, err error) {
-		args := make([]reflect.Value, len(argumentBuilders))
-		for i, ab := range argumentBuilders {
-			arg, err := ab.build(p)
-			if err != nil {
-				return nil, p.Context, err
-			}
-			args[i] = reflect.ValueOf(arg)
+	resolver.fnPrototype = resolveFnValue
+	resolver.fn = func(p graphql.ResolveParams) (interface{}, context.Context, error) {
+		args, err := resolver.buildArgs(p)
+		if err != nil {
+			return nil, p.Context, err
 		}
 		results := resolveFnValue.Call(args)
-		ctx = p.Context
-		for i, r := range results {
-			switch returnTypes[i] {
-			case returnResult:
-				result = r.Interface()
-			case returnContext:
-				ctx = context.WithValue(ctx, r.Type(), r.Interface())
-			case returnError:
-				if !r.IsNil() {
-					err = r.Interface().(error)
-				}
-			}
-		}
-		return
+		return resolver.buildResults(p.Context, results)
 	}
 
 	return &resolver, nil
