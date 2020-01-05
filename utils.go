@@ -129,3 +129,37 @@ func newPrototype(p reflect.Type) interface{} {
 	}
 	return v.Interface()
 }
+
+func getInt(value interface{}) int {
+	switch value := value.(type) {
+	case int:
+		return value
+	case int8:
+		return int(value)
+	case int16:
+		return int(value)
+	case int32:
+		return int(value)
+	case int64:
+		return int(value)
+	case uint:
+		return int(value)
+	case uint8:
+		return int(value)
+	case uint16:
+		return int(value)
+	case uint32:
+		return int(value)
+	case uint64:
+		return int(value)
+	case string:
+		i, _ := strconv.ParseInt(value, 10, 32)
+		return int(i)
+	case bool:
+		if value {
+			return 1
+		}
+		return 0
+	}
+	return 0
+}

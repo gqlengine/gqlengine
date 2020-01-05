@@ -210,34 +210,10 @@ func (engine *Engine) AddPaginationQuery(name, description string, resolveList, 
 		})
 	}
 
-	baseName := listResolver.outBaseType.Name()
-	if listResolver.outBaseType.Kind() == reflect.Ptr {
-		baseName = listResolver.outBaseType.Elem().Name()
-	}
-
-	paginationResults := graphql.NewObject(graphql.ObjectConfig{
-		Name:        baseName + "PaginationResults",
-		Description: "pagination results of " + baseName,
-		Fields: graphql.Fields{
-			"page": {
-				Description: "current page",
-				Type:        graphql.Int,
-			},
-			"total": {
-				Description: "total records",
-				Type:        graphql.Int,
-			},
-			"list": {
-				Description: "list of " + baseName,
-				Type:        graphql.NewList(engine.types[listResolver.outBaseType]),
-			},
-		},
-	})
-
 	engine.query.AddFieldConfig(name, &graphql.Field{
 		Description: description,
 		Args:        argConfigs,
-		Type:        paginationResults,
+		Type:        engine.makePaginationQueryResultObject(listResolver.outBaseType),
 		Resolve: graphql.ResolveFieldWithContext(func(p graphql.ResolveParams) (interface{}, context.Context, error) {
 			ctx := p.Context
 			args, err := listResolver.buildArgs(p)
@@ -266,10 +242,10 @@ func (engine *Engine) AddPaginationQuery(name, description string, resolveList, 
 				return nil, ctx, err
 			}
 
-			return map[string]interface{}{
-				"page":  pagination.Page,
-				"total": total,
-				"list":  results,
+			return PaginationQueryResult{
+				Page:  pagination.Page,
+				List:  results,
+				Total: getInt(total),
 			}, ctx, err
 		}),
 	})

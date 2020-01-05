@@ -2,6 +2,8 @@
 package gqlengine
 
 import (
+	"reflect"
+
 	"github.com/karfield/graphql"
 	"github.com/mitchellh/mapstructure"
 )
@@ -33,4 +35,36 @@ func getPaginationFromParams(p graphql.ResolveParams) Pagination {
 	}
 	_ = mapstructure.WeakDecode(p.Args, &pagination)
 	return pagination
+}
+
+type PaginationQueryResult struct {
+	Page  int         `json:"page"`
+	List  interface{} `json:"list"`
+	Total int         `json:"total"`
+}
+
+func (engine *Engine) makePaginationQueryResultObject(baseType reflect.Type) graphql.Type {
+	baseName := baseType.Name()
+	if baseType.Kind() == reflect.Ptr {
+		baseName = baseType.Elem().Name()
+	}
+
+	return graphql.NewObject(graphql.ObjectConfig{
+		Name:        baseName + "PaginationResults",
+		Description: "pagination results of " + baseName,
+		Fields: graphql.Fields{
+			"page": {
+				Description: "current page",
+				Type:        graphql.Int,
+			},
+			"total": {
+				Description: "total records",
+				Type:        graphql.Int,
+			},
+			"list": {
+				Description: "list of " + baseName,
+				Type:        graphql.NewList(engine.types[baseType]),
+			},
+		},
+	})
 }

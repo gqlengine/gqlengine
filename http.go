@@ -18,7 +18,7 @@ func fixCors(w http.ResponseWriter, r *http.Request) {
 	// use proper JSON Header
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Auth-Token, Authorization, Origin, X-Requested-With")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Auth-Token, x-apollo-tracing,  Authorization, Origin, X-Requested-With")
 	w.Header().Set("Access-Control-Expose-Headers", "*")
 
 	if r.Method == http.MethodOptions {
