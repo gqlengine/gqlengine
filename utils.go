@@ -270,7 +270,7 @@ func BeforeResolve(resolve interface{}, checker interface{}) (interface{}, error
 		return nil, fmt.Errorf("missing check error result")
 	}
 
-	args := make([]reflect.Type, resolveType.NumIn(), checkerType.NumIn())
+	args := make([]reflect.Type, resolveType.NumIn()+checkerType.NumIn())
 	results := make([]reflect.Type, resolveType.NumOut())
 	for i := 0; i < resolveType.NumIn(); i++ {
 		in := resolveType.In(i)
