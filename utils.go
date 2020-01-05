@@ -2,6 +2,7 @@
 package gqlengine
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 	"time"
@@ -162,4 +163,155 @@ func getInt(value interface{}) int {
 		return 0
 	}
 	return 0
+}
+
+var (
+	dftBoolValue       = reflect.ValueOf(false)
+	dftIntValue        = reflect.ValueOf(0)
+	dftInt8Value       = reflect.ValueOf(int8(0))
+	dftInt16Value      = reflect.ValueOf(int16(0))
+	dftInt32Value      = reflect.ValueOf(int32(0))
+	dftInt64Value      = reflect.ValueOf(int64(0))
+	dftUintValue       = reflect.ValueOf(uint(0))
+	dftUint8Value      = reflect.ValueOf(uint8(0))
+	dftUint16Value     = reflect.ValueOf(uint16(0))
+	dftUint32Value     = reflect.ValueOf(uint32(0))
+	dftUint64Value     = reflect.ValueOf(uint64(0))
+	dftUintptrValue    = reflect.ValueOf(uintptr(0))
+	dftFloat32Value    = reflect.ValueOf(float32(0))
+	dftFloat64Value    = reflect.ValueOf(float64(0))
+	dftComplex64Value  = reflect.ValueOf(complex64(0))
+	dftComplex128Value = reflect.ValueOf(complex128(0))
+	dftNilValue        = reflect.ValueOf(nil)
+	dftStringValue     = reflect.ValueOf("")
+)
+
+func makeDefault(p reflect.Type) reflect.Value {
+	switch p.Kind() {
+	case reflect.Bool:
+		return dftBoolValue
+	case reflect.Int:
+		return dftIntValue
+	case reflect.Int8:
+		return dftInt8Value
+	case reflect.Int16:
+		return dftInt16Value
+	case reflect.Int32:
+		return dftInt32Value
+	case reflect.Int64:
+		return dftInt64Value
+	case reflect.Uint:
+		return dftUintValue
+	case reflect.Uint8:
+		return dftUint8Value
+	case reflect.Uint16:
+		return dftUint16Value
+	case reflect.Uint32:
+		return dftUint32Value
+	case reflect.Uint64:
+		return dftUint64Value
+	case reflect.Uintptr:
+		return dftUintptrValue
+	case reflect.Float32:
+		return dftFloat32Value
+	case reflect.Float64:
+		return dftFloat64Value
+	case reflect.Complex64:
+		return dftComplex64Value
+	case reflect.Complex128:
+		return dftComplex128Value
+	case reflect.Array:
+		return dftNilValue
+	case reflect.Chan:
+		return dftNilValue
+	case reflect.Func:
+		return dftNilValue
+	case reflect.Interface:
+		return dftNilValue
+	case reflect.Map:
+		return dftNilValue
+	case reflect.Ptr:
+		return dftNilValue
+	case reflect.Slice:
+		return dftNilValue
+	case reflect.String:
+		return dftStringValue
+	case reflect.Struct:
+		return reflect.New(p).Elem()
+	}
+	panic("unsupported type('" + p.String() + "') to make default value")
+}
+
+func BeforeResolve(resolve interface{}, checker interface{}) (interface{}, error) {
+	resolveType := reflect.TypeOf(resolve)
+	checkerType := reflect.TypeOf(checker)
+	if checkerType.Kind() != reflect.Func {
+		return nil, fmt.Errorf("checker is not a func, but '%s'", checkerType.String())
+	}
+	if resolveType.Kind() != reflect.Func {
+		return nil, fmt.Errorf("resolver is not a func, but '%s'", checkerType.String())
+	}
+	if checkerType.NumOut() == 0 {
+		return nil, fmt.Errorf("checker must return a bool result indicates whether resolve can be called")
+	}
+	checkError := -1
+	for i := 0; i < checkerType.NumOut(); i++ {
+		out := checkerType.Out(i)
+		if out.Implements(errorType) {
+			if checkError >= 0 {
+				return nil, fmt.Errorf("multiple errors returns by checker at result[%d] and result[%d]", checkError, i)
+			}
+			checkError = i
+		} else {
+			return nil, fmt.Errorf("unsupported result[%d] of checker", i)
+		}
+	}
+	if checkError < 0 {
+		return nil, fmt.Errorf("missing check error result")
+	}
+
+	args := make([]reflect.Type, resolveType.NumIn(), checkerType.NumIn())
+	results := make([]reflect.Type, resolveType.NumOut())
+	for i := 0; i < resolveType.NumIn(); i++ {
+		in := resolveType.In(i)
+		args[i] = in
+	}
+
+	offset := resolveType.NumIn()
+	for i := 0; i < checkerType.NumIn(); i++ {
+		in := checkerType.In(i)
+		args[offset+i] = in
+	}
+
+	for i := 0; i < resolveType.NumOut(); i++ {
+		results[i] = resolveType.Out(i)
+	}
+
+	resultBuilder := func(err reflect.Value) []reflect.Value {
+		returns := make([]reflect.Value, len(results))
+		for i, r := range results {
+			if r.Implements(errorType) {
+				returns[i] = err
+			} else {
+				returns[i] = makeDefault(r)
+			}
+		}
+		return returns
+	}
+
+	checkerFn := reflect.ValueOf(checker)
+	resolveFn := reflect.ValueOf(resolve)
+	newFn := reflect.FuncOf(args, results, false)
+	return reflect.MakeFunc(newFn, func(args []reflect.Value) (results []reflect.Value) {
+		checkerArgs := args[offset:]
+		checkResults := checkerFn.Call(checkerArgs)
+		if checkError >= 0 {
+			err := checkResults[checkError]
+			if !err.IsNil() {
+				return resultBuilder(err)
+			}
+		}
+		resultArgs := args[0:offset]
+		return resolveFn.Call(resultArgs)
+	}).Interface(), nil
 }
