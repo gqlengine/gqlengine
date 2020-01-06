@@ -39,9 +39,9 @@ func (o *objectSourceBuilder) build(params graphql.ResolveParams) (interface{}, 
 
 type objectResolvers map[string]graphql.FieldResolveFn
 
-func (engine *Engine) objectFields(structType reflect.Type, config *objectFieldLazyConfig) error {
-	for i := 0; i < structType.NumField(); i++ {
-		f := structType.Field(i)
+func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLazyConfig) error {
+	for i := 0; i < baseType.NumField(); i++ {
+		f := baseType.Field(i)
 
 		if isIgnored(&f) {
 			continue
@@ -51,7 +51,7 @@ func (engine *Engine) objectFields(structType reflect.Type, config *objectFieldL
 			// embedded
 			embeddedInfo, err := unwrap(f.Type)
 			if err != nil {
-				return fmt.Errorf("check object field '%s' failure: %E", structType.String(), err)
+				return fmt.Errorf("check object field '%s' failure: %E", baseType.String(), err)
 			}
 			if embeddedInfo.array {
 				return fmt.Errorf("embedded object type should be struct")
@@ -126,21 +126,28 @@ func (engine *Engine) collectObject(info *unwrappedInfo) (graphql.Type, error) {
 		name = rename.GraphQLObjectName()
 	}
 
+	baseType := info.baseType
 	if delegated, ok := prototype.(ObjectDelegation); ok {
 		objPrototype := delegated.GraphQLObjectDelegation()
-		info, err := unwrap(reflect.TypeOf(objPrototype))
+		delegatedType := reflect.TypeOf(objPrototype)
+		info, err := unwrap(delegatedType)
 		if err != nil {
 			return nil, fmt.Errorf("collect delegated object failure %E", err)
 		}
 		if info.array {
 			return nil, fmt.Errorf("delegated prototype should not be non-struct")
 		}
+		if info.baseType.Kind() != reflect.Struct {
+			return nil, fmt.Errorf("delegated type of '%s' should be an object but '%s'",
+				baseType.Name(), delegatedType.String())
+		}
+		baseType = info.baseType
 	}
 
 	fieldsConfig := objectFieldLazyConfig{
 		fields: map[string]objectField{},
 	}
-	err := engine.objectFields(info.baseType, &fieldsConfig)
+	err := engine.objectFields(baseType, &fieldsConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -157,15 +164,15 @@ func (engine *Engine) collectObject(info *unwrappedInfo) (graphql.Type, error) {
 		}
 	}
 
-	preassigned := graphql.NewObject(graphql.ObjectConfig{
+	object := graphql.NewObject(graphql.ObjectConfig{
 		Name:        name,
 		Description: prototype.GraphQLObjectDescription(),
 		Fields:      fieldsConfig.getFields(info.baseType, engine),
 		Interfaces:  intfs,
 	})
-	engine.types[info.baseType] = preassigned
+	engine.types[info.baseType] = object
 
-	return preassigned, nil
+	return object, nil
 }
 
 func (engine *Engine) asObjectSource(p reflect.Type) (resolverArgumentBuilder, *unwrappedInfo, error) {
