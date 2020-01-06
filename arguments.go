@@ -16,15 +16,11 @@ type Arguments interface {
 var _argumentsType = reflect.TypeOf((*Arguments)(nil)).Elem()
 
 type argumentsBuilder struct {
+	ptr bool
 	typ reflect.Type
 }
 
-func unmarshalArguments(params graphql.ResolveParams, typ reflect.Type) (interface{}, error) {
-	requirePtr := false
-	if typ.Kind() == reflect.Ptr {
-		requirePtr = true
-		typ = typ.Elem()
-	}
+func unmarshalArguments(params graphql.ResolveParams, requirePtr bool, typ reflect.Type) (interface{}, error) {
 	val := reflect.New(typ)
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           val.Interface(),
@@ -44,39 +40,27 @@ func unmarshalArguments(params graphql.ResolveParams, typ reflect.Type) (interfa
 }
 
 func (a argumentsBuilder) build(params graphql.ResolveParams) (interface{}, error) {
-	return unmarshalArguments(params, a.typ)
+	return unmarshalArguments(params, a.ptr, a.typ)
 }
+
+type fieldChecker func(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error)
 
 func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) error {
 	if _, ok := engine.argConfigs[baseType]; ok {
 		return nil
 	}
 
-	structType := baseType
-	if baseType.Kind() == reflect.Ptr {
-		structType = baseType.Elem()
-	}
-
 	defs := graphql.FieldConfigArgument{}
-	for i := 0; i < structType.NumField(); i++ {
-		f := structType.Field(i)
+	for i := 0; i < baseType.NumField(); i++ {
+		f := baseType.Field(i)
 
-		var gType graphql.Type
-		if scalar := asBuiltinScalar(f); scalar != nil {
-			gType = scalar
-		} else if id := engine.asIdField(f); id != nil {
-			gType = id
-		} else if input := engine.asInputField(f); input != nil {
-			gType = input
-		} else if enum := engine.asEnumField(f); enum != nil {
-			gType = enum
-		} else if scalar := engine.asCustomScalarField(f); scalar != nil {
-			gType = scalar
-		} else {
-			// FIXME: no more input field
-			return fmt.Errorf("argument config '%s' has unsupported field[%d] (type: %s}", baseType.Name(), i, f.Name)
+		gType, _, err := checkField(&f, engine.inputFieldCheckers, "argument")
+		if err != nil {
+			return err
 		}
-
+		if gType == nil {
+			return fmt.Errorf("unsupported type '%s' for argument[%d] '%s'", baseType.Name(), i, f.Name)
+		}
 		if isRequired(&f) {
 			gType = graphql.NewNonNull(gType)
 		}
@@ -98,16 +82,23 @@ func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) error {
 	return nil
 }
 
-func (engine *Engine) asArguments(arg reflect.Type) *argumentsBuilder {
-	isArg, isArray, baseType := implementsOf(arg, _argumentsType)
-	if isArray || !isArg {
-		return nil
-	}
-	err := engine.collectFieldArgumentConfig(baseType)
+func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, *unwrappedInfo, error) {
+	isArg, info, err := implementsOf(arg, _argumentsType)
 	if err != nil {
-		panic(err)
+		return nil, &info, err
+	}
+	if !isArg {
+		return nil, &info, nil
+	}
+	if info.array {
+		return nil, &info, fmt.Errorf("arguments object should not be a slice/array")
+	}
+	err = engine.collectFieldArgumentConfig(info.baseType)
+	if err != nil {
+		return nil, &info, err
 	}
 	return &argumentsBuilder{
+		ptr: arg.Kind() == reflect.Ptr,
 		typ: arg,
-	}
+	}, &info, nil
 }

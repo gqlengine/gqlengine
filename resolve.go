@@ -23,10 +23,13 @@ type resolver struct {
 	fn             graphql.ResolveFieldWithContext
 	fnPrototype    reflect.Value
 	args           reflect.Type
+	argsInfo       *unwrappedInfo
+	argConfig      graphql.FieldConfigArgument
 	argBuilders    []resolverArgumentBuilder
 	source         reflect.Type
+	sourceInfo     *unwrappedInfo
 	out            reflect.Type
-	outBaseType    reflect.Type
+	outInfo        *unwrappedInfo
 	resultBuilders []int
 	isBatch        bool
 }
@@ -86,6 +89,10 @@ func checkResultType(expected, actually reflect.Type) bool {
 	return expected == actually
 }
 
+type (
+	resolveResultChecker func(p reflect.Type) (*unwrappedInfo, error)
+)
+
 func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*resolver, error) {
 	resolveFn := reflect.ValueOf(resolve)
 	resolveFnType := resolveFn.Type()
@@ -101,23 +108,34 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 	for i := 0; i < resolveFnType.NumIn(); i++ {
 		in := resolveFnType.In(i)
 		var builder resolverArgumentBuilder
-		if argsBuilder := engine.asArguments(in); argsBuilder != nil {
+		if argsBuilder, info, err := engine.asArguments(in); err != nil || argsBuilder != nil {
+			if err != nil {
+				return nil, err
+			}
 			builder = argsBuilder
 			if resolver.args != nil {
 				return nil, fmt.Errorf("more than one 'arguments' parameter[%d]", i)
 			}
 			resolver.args = in
-		} else if ctxBuilder := engine.asContextArgument(in); ctxBuilder != nil {
+			resolver.argsInfo = info
+		} else if ctxBuilder, err := engine.asContextArgument(in); err != nil || ctxBuilder != nil {
+			if err != nil {
+				return nil, err
+			}
 			builder = ctxBuilder
-		} else if objSource, isBatch, obj := engine.asObjectSource(in); objSource != nil {
+		} else if objSource, info, err := engine.asObjectSource(in); err != nil || objSource != nil {
+			if err != nil {
+				return nil, err
+			}
 			builder = objSource
 			if resolver.source == nil {
-				resolver.source = obj
+				resolver.source = in
 			} else {
 				return nil, fmt.Errorf("more than one source argument[%d]: '%s'", i, in)
 			}
-			resolver.isBatch = isBatch
-		} else {
+			resolver.isBatch = info.array
+			resolver.sourceInfo = info
+		} else { // fixme: add selection set builder
 			return nil, fmt.Errorf("unsupported argument type [%d]: '%s'", i, in)
 		}
 		argumentBuilders[i] = builder
@@ -148,8 +166,8 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 	for i := 0; i < resolveFnType.NumOut(); i++ {
 		out := resolveFnType.Out(i)
 		var (
-			returnType  int
-			outBaseType reflect.Type
+			returnType int
+			outInfo    *unwrappedInfo
 		)
 		if isContext, err := engine.asContextMerger(out); isContext {
 			returnType = returnContext
@@ -172,17 +190,16 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 				}
 			}
 
-			if baseType := engine.asObjectResult(out); baseType != nil {
-				outBaseType = baseType
-			} else if baseType := asBuiltinScalarResult(out); baseType != nil {
-				outBaseType = baseType
-			} else if baseType := engine.asEnumResult(out); baseType != nil {
-				outBaseType = baseType
-			} else if baseType := engine.asIdResult(out); baseType != nil {
-				outBaseType = baseType
-			} else if baseType := engine.asCustomScalarResult(out); baseType != nil {
-				outBaseType = baseType
-			} else {
+			for _, check := range engine.resultCheckers {
+				if info, err := check(out); err != nil {
+					return nil, err
+				} else if info != nil {
+					outInfo = info
+					break
+				}
+			}
+
+			if outInfo == nil {
 				return nil, fmt.Errorf("unsupported resolve result[%d] '%s'", i, out)
 			}
 
@@ -190,12 +207,12 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 		}
 
 		returnTypes[i] = returnType
-		if outBaseType != nil {
+		if outInfo != nil {
 			if resolver.out != nil {
 				return nil, fmt.Errorf("more than one result[%d] '%s'", i, out)
 			}
 			resolver.out = out
-			resolver.outBaseType = outBaseType
+			resolver.outInfo = outInfo
 		}
 	}
 

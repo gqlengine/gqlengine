@@ -32,25 +32,31 @@ func (engine *Engine) collectIdType(baseType reflect.Type) {
 	}
 }
 
-func (engine *Engine) asIdField(field reflect.StructField) graphql.Type {
-	isId, isArray, baseType := implementsOf(field.Type, _idType)
+func (engine *Engine) asIdField(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
+	isId, info, err := implementsOf(field.Type, _idType)
+	if err != nil {
+		return nil, &info, err
+	}
 	if !isId {
-		return nil
+		return nil, &info, nil
 	}
 
-	engine.collectIdType(baseType)
-	if isArray {
-		return graphql.NewNonNull(graphql.ID)
+	engine.collectIdType(info.baseType)
+	if info.array {
+		return graphql.NewNonNull(graphql.ID), &info, nil
 	} else {
-		return graphql.ID
+		return graphql.ID, &info, nil
 	}
 }
 
-func (engine *Engine) asIdResult(out reflect.Type) reflect.Type {
-	isId, _, baseType := implementsOf(out, _idType)
-	if !isId {
-		return nil
+func (engine *Engine) asIdResult(out reflect.Type) (*unwrappedInfo, error) {
+	isId, info, err := implementsOf(out, _idType)
+	if err != nil {
+		return nil, err
 	}
-	engine.collectIdType(baseType)
-	return baseType
+	if !isId {
+		return nil, nil
+	}
+	engine.collectIdType(info.baseType)
+	return &info, nil
 }

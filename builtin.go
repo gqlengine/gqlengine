@@ -42,12 +42,16 @@ func (engine *Engine) initBuiltinTypes() {
 	}
 }
 
-func asBuiltinScalar(field reflect.StructField) (scalar graphql.Type) {
-	baseType, isArray, _ := unwrap(field.Type)
+func asBuiltinScalar(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
+	info, err := unwrap(field.Type)
+	if err != nil {
+		return nil, &info, err
+	}
 
-	if baseType.PkgPath() == "" {
+	var scalar graphql.Type
+	if info.baseType.PkgPath() == "" {
 		// builtin
-		switch baseType.Kind() {
+		switch info.baseType.Kind() {
 		case reflect.Int, reflect.Int64, reflect.Int32, reflect.Uint, reflect.Uint64, reflect.Uint32:
 			scalar = graphql.Int
 		case reflect.Int8, reflect.Int16, reflect.Uint8, reflect.Uint16:
@@ -61,7 +65,7 @@ func asBuiltinScalar(field reflect.StructField) (scalar graphql.Type) {
 		default:
 		}
 	} else {
-		switch baseType.String() {
+		switch info.baseType.String() {
 		case "time.Time":
 			scalar = graphql.DateTime
 		case "time.Duration":
@@ -70,46 +74,39 @@ func asBuiltinScalar(field reflect.StructField) (scalar graphql.Type) {
 	}
 
 	if scalar == nil {
-		return
+		return nil, &info, nil
 	}
 
-	if isArray {
+	if info.array {
 		scalar = graphql.NewList(scalar)
 	}
 
-	if isRequired(&field) {
+	if isRequired(field) {
 		scalar = graphql.NewNonNull(scalar)
 	}
 
-	return
+	return scalar, &info, nil
 }
 
-func asBuiltinScalarResult(baseType reflect.Type) reflect.Type {
-	baseType, _, _ = unwrap(baseType)
-	if baseType.PkgPath() == "" {
+func asBuiltinScalarResult(p reflect.Type) (*unwrappedInfo, error) {
+	info, err := unwrap(p)
+	if err != nil {
+		return &info, err
+	}
+	if info.baseType.PkgPath() == "" {
 		// builtin
-		switch baseType.Kind() {
-		case reflect.Int, reflect.Int64, reflect.Int32, reflect.Uint, reflect.Uint64, reflect.Uint32:
-			return baseType
-		case reflect.Int8, reflect.Int16, reflect.Uint8, reflect.Uint16:
-			return baseType
-		case reflect.Float32, reflect.Float64:
-			return baseType
-		case reflect.Bool:
-			return baseType
-		case reflect.String:
-			return baseType
-		default:
+		if info.baseType.Kind() != reflect.Struct {
+			return &info, nil
 		}
 	} else {
-		switch baseType.String() {
+		switch info.baseType.String() {
 		case "time.Time":
-			return baseType
+			return &info, nil
 		case "time.Duration":
-			return baseType
+			return &info, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 var Void = graphql.NewScalar(graphql.ScalarConfig{

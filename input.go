@@ -24,12 +24,12 @@ type CustomParserInput interface {
 
 var _inputType = reflect.TypeOf((*Input)(nil)).Elem()
 
-func (engine *Engine) collectInput(baseType reflect.Type) graphql.Type {
+func (engine *Engine) collectInput(baseType reflect.Type) (graphql.Type, error) {
 	if input, ok := engine.types[baseType]; ok {
 		if input != nil {
-			return input
+			return input, nil
 		}
-		panic("loop-referred input object")
+		return nil, fmt.Errorf("loop-referred input object %s", baseType.String())
 	}
 	structType := baseType
 	if baseType.Kind() == reflect.Ptr {
@@ -40,21 +40,13 @@ func (engine *Engine) collectInput(baseType reflect.Type) graphql.Type {
 	for i := 0; i < structType.NumField(); i++ {
 		f := structType.Field(i)
 
-		var fieldType graphql.Type
-		if scalar := asBuiltinScalar(f); scalar != nil {
-			fieldType = scalar
-		} else if id := engine.asIdField(f); id != nil {
-			fieldType = id
-		} else if input := engine.asInputField(f); input != nil {
-			fieldType = input
-		} else if enum := engine.asEnumField(f); enum != nil {
-			fieldType = enum
-		} else if scalar := engine.asCustomScalarField(f); scalar != nil {
-			fieldType = scalar
-		} else {
-			panic(fmt.Errorf("unsupported field type for input: %s", f.Type.String()))
+		fieldType, _, err := checkField(&f, engine.inputFieldCheckers, "input field")
+		if err != nil {
+			return nil, err
 		}
-
+		if fieldType == nil {
+			return nil, fmt.Errorf("unsupported field type for input: %s", f.Type.String())
+		}
 		name := fieldName(&f)
 		value, err := defaultValue(&f)
 		if err != nil {
@@ -86,17 +78,23 @@ func (engine *Engine) collectInput(baseType reflect.Type) graphql.Type {
 	})
 
 	engine.types[baseType] = d
-	return d
+	return d, nil
 }
 
-func (engine *Engine) asInputField(field reflect.StructField) graphql.Type {
-	isInput, isArray, baseType := implementsOf(field.Type, _inputType)
-	if !isInput {
-		return nil
+func (engine *Engine) asInputField(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
+	isInput, info, err := implementsOf(field.Type, _inputType)
+	if err != nil {
+		return nil, &info, err
 	}
-	var gtype = engine.collectInput(baseType)
-	if isArray {
+	if !isInput {
+		return nil, &info, nil
+	}
+	gtype, err := engine.collectInput(info.baseType)
+	if err != nil {
+		return nil, &info, err
+	}
+	if info.array {
 		gtype = graphql.NewList(gtype)
 	}
-	return gtype
+	return gtype, &info, nil
 }

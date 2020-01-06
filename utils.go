@@ -6,57 +6,112 @@ import (
 	"reflect"
 	"strconv"
 	"time"
+
+	"github.com/karfield/graphql"
 )
 
-func unwrap(p reflect.Type) (baseType reflect.Type, isArray, isPtr bool) {
+type unwrappedInfo struct {
+	array    bool
+	ptrType  reflect.Type
+	implType reflect.Type
+	baseType reflect.Type
+}
+
+func unwrap(p reflect.Type) (unwrappedInfo, error) {
 	switch p.Kind() {
 	case reflect.Slice, reflect.Array:
-		e, _, isPtr := unwrap(p.Elem())
-		return e, true, isPtr
+		info, err := unwrap(p.Elem())
+		info.array = true
+		return info, err
 	case reflect.Ptr:
-		return p.Elem(), false, true
-	case reflect.Chan:
-		return unwrap(p.Elem())
-	case reflect.Func:
-		panic("func is not supported")
-	case reflect.Map:
-		panic("map is not supported")
+		b := p.Elem()
+		if !isBaseType(b) {
+			return unwrappedInfo{}, fmt.Errorf("'%s' is not pointed to a base type", p.String())
+		}
+		return unwrappedInfo{
+			ptrType:  p,
+			baseType: b,
+			implType: b,
+		}, nil
 	default:
-		return p, false, false
+		if isBaseType(p) {
+			return unwrappedInfo{
+				baseType: p,
+				ptrType:  reflect.New(p).Type(), // fixme: optimize for performance here
+				implType: p,
+			}, nil
+		}
+		return unwrappedInfo{}, fmt.Errorf("unsupported type('%s') to unwrap", p.String())
 	}
 }
 
-func implementsOf(p reflect.Type, intf reflect.Type) (implemented, isArray bool, unwrappedType reflect.Type) {
+func isBaseType(p reflect.Type) bool {
+	switch p.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Bool,
+		reflect.String,
+		reflect.Complex64, reflect.Complex128,
+		reflect.Struct:
+		return true
+	}
+	return false
+}
+
+func implementsOf(p reflect.Type, intf reflect.Type) (implemented bool, info unwrappedInfo, err error) {
 	switch p.Kind() {
 	case reflect.Slice, reflect.Array:
-		implemented, _, unwrappedType = implementsOf(p.Elem(), intf)
-		isArray = true
+		e := p.Elem()
+		if e.Kind() == reflect.Ptr || isBaseType(e) {
+			implemented, info, err = implementsOf(p.Elem(), intf)
+			info.array = true
+		} else {
+			err = fmt.Errorf("'%s' is illegal as an element of slice/array", e.String())
+		}
 	case reflect.Ptr:
 		implemented = p.Implements(intf)
 		if implemented {
-			if p.Elem().Implements(intf) {
-				unwrappedType = p.Elem()
-			} else {
-				unwrappedType = p
+			info.ptrType = p
+			info.array = false
+			info.implType = p
+			info.baseType = p.Elem()
+			if !isBaseType(info.baseType) {
+				err = fmt.Errorf("'%s' is not point to a base type", p.String())
 			}
 			return
 		}
-		return implementsOf(p.Elem(), intf)
-	case reflect.Func:
-		panic("func is not supported")
-	case reflect.Map:
-		panic("map is not supported")
+		b := p.Elem()
+		if !isBaseType(b) {
+			err = fmt.Errorf("'%s' is not point to a base type", p.String())
+			return
+		}
+		implemented = b.Implements(intf)
+		if implemented {
+			info.ptrType = p
+			info.implType = b
+			info.baseType = b
+			info.array = false
+		}
 	default:
+		if !isBaseType(p) {
+			err = fmt.Errorf("'%s' is not a base type", p.String())
+		}
 		implemented = p.Implements(intf)
-		if !implemented {
-			// try ptr
-			pp := reflect.New(p).Type()
-			implemented = pp.Implements(intf)
-			if implemented {
-				unwrappedType = pp
-			}
-		} else {
-			unwrappedType = p
+		if implemented {
+			info.implType = p
+			info.baseType = p
+		}
+		// try ptr
+		pp := reflect.New(p).Type()
+		info.ptrType = pp
+		if implemented {
+			return
+		}
+
+		implemented = pp.Implements(intf)
+		if implemented {
+			info.implType = pp
+			info.baseType = p
 		}
 	}
 	return
@@ -314,4 +369,18 @@ func BeforeResolve(resolve interface{}, checker interface{}) (interface{}, error
 		resultArgs := args[0:offset]
 		return resolveFn.Call(resultArgs)
 	}).Interface(), nil
+}
+
+func checkField(field *reflect.StructField, checkers []fieldChecker, errString string) (graphql.Type, *unwrappedInfo, error) {
+	for _, check := range checkers {
+		typ, info, err := check(field)
+		if err != nil {
+			return nil, info, err
+		}
+		if typ == nil {
+			continue
+		}
+		return typ, info, nil
+	}
+	return nil, nil, fmt.Errorf("unsupported type('%s') for %s '%s'", field.Type.String(), errString, field.Name)
 }

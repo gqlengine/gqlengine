@@ -36,43 +36,52 @@ var (
 )
 
 type contextBuilder struct {
-	typ reflect.Type
+	unwrappedInfo
 }
 
 func (c *contextBuilder) build(params graphql.ResolveParams) (interface{}, error) {
-	ctxVal := params.Context.Value(c.typ)
+	ctxVal := params.Context.Value(c.ptrType)
+	if ctxVal == nil {
+		ctxVal = params.Context.Value(c.baseType)
+	}
 	return ctxVal, nil
 }
 
-func (engine *Engine) asContextArgument(p reflect.Type) *contextBuilder {
-	isCtx, isArray, baseType := implementsOf(p, _requestContextType)
-	if !isCtx {
-		return nil
+func (engine *Engine) asContextArgument(p reflect.Type) (*contextBuilder, error) {
+	isCtx, info, err := implementsOf(p, _requestContextType)
+	if err != nil {
+		return nil, err
 	}
-	if isArray {
-		panic("request context argument should not be a slice")
+	if !isCtx {
+		return nil, nil
+	}
+	if info.array {
+		return nil, fmt.Errorf("context object('%s') should not be a slice/array", p.String())
 	}
 
-	if _, ok := engine.reqCtx[baseType]; !ok {
-		engine.reqCtx[baseType] = struct{}{}
+	if _, ok := engine.reqCtx[info.baseType]; !ok {
+		engine.reqCtx[info.baseType] = struct{}{}
 	}
 
 	return &contextBuilder{
-		typ: baseType,
-	}
+		unwrappedInfo: info,
+	}, nil
 }
 
 func (engine *Engine) asContextMerger(p reflect.Type) (bool, error) {
-	isCtx, isArray, baseType := implementsOf(p, _responseContextType)
+	isCtx, info, err := implementsOf(p, _responseContextType)
+	if err != nil {
+		return false, err
+	}
 	if !isCtx {
 		return false, nil
 	}
-	if isArray {
-		return false, fmt.Errorf("response context result should not be a slice")
+	if info.array {
+		return false, fmt.Errorf("response context result('%s') should not be a slice", p.String())
 	}
 
-	if _, ok := engine.respCtx[baseType]; !ok {
-		engine.respCtx[baseType] = struct{}{}
+	if _, ok := engine.respCtx[info.baseType]; !ok {
+		engine.respCtx[info.baseType] = struct{}{}
 	}
 
 	return true, nil

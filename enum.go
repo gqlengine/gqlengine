@@ -57,23 +57,29 @@ func (engine *Engine) collectEnum(baseType reflect.Type) graphql.Type {
 	return d
 }
 
-func (engine *Engine) asEnumField(field reflect.StructField) graphql.Type {
-	isEnum, isArray, baseType := implementsOf(field.Type, enumType)
-	if !isEnum {
-		return nil
+func (engine *Engine) asEnumField(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
+	isEnum, info, err := implementsOf(field.Type, enumType)
+	if err != nil {
+		return nil, &info, err
 	}
-	var gType = engine.collectEnum(baseType)
-	if isArray {
+	if !isEnum {
+		return nil, &info, nil
+	}
+	var gType = engine.collectEnum(info.baseType)
+	if info.array {
 		gType = graphql.NewList(gType)
 	}
-	return gType
+	return gType, &info, nil
 }
 
-func (engine *Engine) asEnumResult(out reflect.Type) reflect.Type {
-	isEnum, _, baseType := implementsOf(out, enumType)
-	if !isEnum {
-		return baseType
+func (engine *Engine) asEnumResult(out reflect.Type) (*unwrappedInfo, error) {
+	isEnum, info, err := implementsOf(out, enumType)
+	if err != nil {
+		return nil, err
 	}
-	engine.collectEnum(baseType)
-	return baseType
+	if !isEnum {
+		return nil, nil
+	}
+	engine.collectEnum(info.baseType)
+	return &info, nil
 }

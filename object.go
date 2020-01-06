@@ -30,6 +30,7 @@ type ObjectDelegation interface {
 var objectType = reflect.TypeOf((*Object)(nil)).Elem()
 
 type objectSourceBuilder struct {
+	unwrappedInfo
 }
 
 func (o *objectSourceBuilder) build(params graphql.ResolveParams) (interface{}, error) {
@@ -38,7 +39,7 @@ func (o *objectSourceBuilder) build(params graphql.ResolveParams) (interface{}, 
 
 type objectResolvers map[string]graphql.FieldResolveFn
 
-func (engine *Engine) objectFields(structType reflect.Type, config *objectFieldLazyConfig) {
+func (engine *Engine) objectFields(structType reflect.Type, config *objectFieldLazyConfig) error {
 	for i := 0; i < structType.NumField(); i++ {
 		f := structType.Field(i)
 
@@ -48,33 +49,24 @@ func (engine *Engine) objectFields(structType reflect.Type, config *objectFieldL
 
 		if f.Anonymous {
 			// embedded
-			embeddedType, isArray, _ := unwrap(f.Type)
-			if isArray {
-				panic("embedded object type should be struct")
+			embeddedInfo, err := unwrap(f.Type)
+			if err != nil {
+				return fmt.Errorf("check object field '%s' failure: %E", structType.String(), err)
 			}
-			engine.objectFields(embeddedType, config)
+			if embeddedInfo.array {
+				return fmt.Errorf("embedded object type should be struct")
+			}
+			err = engine.objectFields(embeddedInfo.baseType, config)
+			if err != nil {
+				return err
+			}
 			continue
 		}
 
-		var fieldType graphql.Type
-		if scalar := asBuiltinScalar(f); scalar != nil {
-			fieldType = scalar
-		} else if id := engine.asIdField(f); id != nil {
-			fieldType = id
-		} else if enum := engine.asEnumField(f); enum != nil {
-			fieldType = enum
-		} else if scalar := engine.asCustomScalarField(f); scalar != nil {
-			fieldType = scalar
-		} else {
-			objType, _, _ := unwrap(f.Type)
-			if objType == structType {
-				panic("same field type and object type in loop")
-			}
-			if obj := engine.asObjectField(f); obj != nil {
-				fieldType = obj
-			}
+		fieldType, _, err := checkField(&f, engine.objFieldCheckers, "object field")
+		if err != nil {
+			return err
 		}
-
 		if fieldType == nil {
 			panic(fmt.Errorf("unsupported field type: %s", f.Type.String()))
 		}
@@ -86,6 +78,7 @@ func (engine *Engine) objectFields(structType reflect.Type, config *objectFieldL
 			deprecated:     deprecatedReason(&f),
 		}
 	}
+	return nil
 }
 
 type objectField struct {
@@ -121,14 +114,11 @@ func (c *objectFieldLazyConfig) getFields(obj reflect.Type, engine *Engine) grap
 	}
 }
 
-func (engine *Engine) collectObject(baseType reflect.Type) graphql.Type {
+func (engine *Engine) collectObject(baseType reflect.Type) (graphql.Type, error) {
 	if obj, ok := engine.types[baseType]; ok {
-		return obj
+		return obj, nil
 	}
 	structType := baseType
-	if baseType.Kind() == reflect.Ptr {
-		structType = baseType.Elem()
-	}
 
 	prototype := newPrototype(baseType).(Object)
 
@@ -139,22 +129,33 @@ func (engine *Engine) collectObject(baseType reflect.Type) graphql.Type {
 
 	if delegated, ok := prototype.(ObjectDelegation); ok {
 		objPrototype := delegated.GraphQLObjectDelegation()
-		d, isArray, _ := unwrap(reflect.TypeOf(objPrototype))
-		if isArray {
-			panic("delegated prototype should not be non-struct")
+		info, err := unwrap(reflect.TypeOf(objPrototype))
+		if err != nil {
+			return nil, fmt.Errorf("collect delegated object failure %E", err)
 		}
-		structType = d
+		if info.array {
+			return nil, fmt.Errorf("delegated prototype should not be non-struct")
+		}
+		structType = info.baseType
 	}
 
 	fieldsConfig := objectFieldLazyConfig{
 		fields: map[string]objectField{},
 	}
-	engine.objectFields(structType, &fieldsConfig)
+	err := engine.objectFields(structType, &fieldsConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	var intfs graphql.Interfaces
 	if impl, ok := prototype.(ImplementedObject); ok {
 		for _, intfPrototype := range impl.GraphQLObjectInterfaces() {
-			intfs = append(intfs, engine.asInterfaceFromPrototype(intfPrototype))
+			intf, err := engine.asInterfaceFromPrototype(intfPrototype)
+			if err != nil {
+				return nil, fmt.Errorf("check type '%s' implemented infterface '%s' failed %E",
+					baseType.Name(), reflect.TypeOf(intfPrototype).Name(), err)
+			}
+			intfs = append(intfs, intf)
 		}
 	}
 
@@ -166,35 +167,52 @@ func (engine *Engine) collectObject(baseType reflect.Type) graphql.Type {
 	})
 	engine.types[baseType] = preassigned
 
-	return preassigned
+	return preassigned, nil
 }
 
-func (engine *Engine) asObjectSource(p reflect.Type) (resolverArgumentBuilder, bool, reflect.Type) {
-	isObj, isArray, baseType := implementsOf(p, objectType)
-	if !isObj {
-		return nil, false, nil
+func (engine *Engine) asObjectSource(p reflect.Type) (resolverArgumentBuilder, *unwrappedInfo, error) {
+	isObj, info, err := implementsOf(p, objectType)
+	if err != nil {
+		return nil, &info, err
 	}
-	engine.collectObject(baseType)
-	return &objectSourceBuilder{}, isArray, baseType
+	if !isObj {
+		return nil, &info, nil
+	}
+	engine.collectObject(info.baseType)
+	return &objectSourceBuilder{
+		unwrappedInfo: info,
+	}, &info, nil
 }
 
-func (engine *Engine) asObjectResult(p reflect.Type) reflect.Type {
-	isObj, _, baseType := implementsOf(p, objectType)
-	if !isObj {
-		return baseType
+func (engine *Engine) asObjectResult(p reflect.Type) (*unwrappedInfo, error) {
+	isObj, info, err := implementsOf(p, objectType)
+	if err != nil {
+		return &info, err
 	}
-	engine.collectObject(baseType)
-	return baseType
+	if !isObj {
+		return nil, nil
+	}
+	_, err = engine.collectObject(info.baseType)
+	if err != nil {
+		return &info, err
+	}
+	return &info, nil
 }
 
-func (engine *Engine) asObjectField(field reflect.StructField) graphql.Type {
-	isObj, isArray, baseType := implementsOf(field.Type, objectType)
-	if !isObj {
-		return nil
+func (engine *Engine) asObjectField(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
+	isObj, info, err := implementsOf(field.Type, objectType)
+	if err != nil {
+		return nil, &info, err
 	}
-	typ := engine.collectObject(baseType)
-	if isArray {
+	if !isObj {
+		return nil, &info, nil
+	}
+	typ, err := engine.collectObject(info.baseType)
+	if err != nil {
+		return nil, &info, err
+	}
+	if info.array {
 		typ = graphql.NewList(typ)
 	}
-	return typ
+	return typ, &info, nil
 }

@@ -61,23 +61,29 @@ func (engine *Engine) collectCustomScalar(baseType reflect.Type) graphql.Type {
 	return d
 }
 
-func (engine *Engine) asCustomScalarField(field reflect.StructField) graphql.Type {
-	isScalar, isArray, baseType := implementsOf(field.Type, scalarType)
-	if !isScalar {
-		return nil
+func (engine *Engine) asCustomScalarField(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
+	isScalar, info, err := implementsOf(field.Type, scalarType)
+	if err != nil {
+		return nil, &info, err
 	}
-	gtype := engine.collectCustomScalar(baseType)
-	if isArray {
+	if !isScalar {
+		return nil, &info, nil
+	}
+	gtype := engine.collectCustomScalar(info.baseType)
+	if info.array {
 		gtype = graphql.NewList(gtype)
 	}
-	return gtype
+	return gtype, &info, nil
 }
 
-func (engine *Engine) asCustomScalarResult(out reflect.Type) reflect.Type {
-	isScalar, _, baseType := implementsOf(out, scalarType)
-	if isScalar {
-		engine.collectCustomScalar(baseType)
-		return baseType
+func (engine *Engine) asCustomScalarResult(out reflect.Type) (*unwrappedInfo, error) {
+	isScalar, info, err := implementsOf(out, scalarType)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if !isScalar {
+		return nil, nil
+	}
+	engine.collectCustomScalar(info.baseType)
+	return &info, nil
 }

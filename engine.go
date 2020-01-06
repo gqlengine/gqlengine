@@ -23,6 +23,10 @@ type Engine struct {
 	respCtx        map[reflect.Type]struct{}
 	objResolvers   map[reflect.Type]objectResolvers
 	batchResolvers map[reflect.Type]objectResolvers
+
+	resultCheckers     []resolveResultChecker
+	inputFieldCheckers []fieldChecker
+	objFieldCheckers   []fieldChecker
 }
 
 type Options struct {
@@ -39,6 +43,28 @@ func NewEngine(options Options) *Engine {
 		respCtx:        map[reflect.Type]struct{}{},
 		objResolvers:   map[reflect.Type]objectResolvers{},
 		batchResolvers: map[reflect.Type]objectResolvers{},
+	}
+	engine.resultCheckers = []resolveResultChecker{
+		asBuiltinScalarResult,
+		engine.asObjectResult,
+		engine.asIdResult,
+		engine.asEnumResult,
+		engine.asCustomScalarResult,
+	}
+	engine.inputFieldCheckers = []fieldChecker{
+		asBuiltinScalar,
+		engine.asIdField,
+		engine.asEnumField,
+		engine.asCustomScalarField,
+		engine.asInputField,
+	}
+	engine.objFieldCheckers = []fieldChecker{
+		asBuiltinScalar,
+		engine.asIdField,
+		engine.asEnumField,
+		engine.asObjectField,
+		//engine.asInterfaceField, fixme: add support for interface field
+		engine.asCustomScalarField,
 	}
 	engine.initBuiltinTypes()
 	return engine
@@ -88,9 +114,9 @@ func (engine *Engine) AddQuery(name string, description string, resolve interfac
 	}
 	var args graphql.FieldConfigArgument
 	if resolver.args != nil {
-		args = engine.argConfigs[resolver.args]
+		args = engine.argConfigs[resolver.argsInfo.baseType]
 	}
-	typ := engine.types[resolver.outBaseType]
+	typ := engine.types[resolver.outInfo.baseType]
 	if resolver.out.Kind() == reflect.Slice {
 		typ = graphql.NewList(typ)
 	}
@@ -116,14 +142,14 @@ func (engine *Engine) AddMutation(name string, description string, resolve inter
 	}
 	var typ graphql.Type = Void
 	if resolver.out != nil {
-		typ = engine.types[resolver.outBaseType]
+		typ = engine.types[resolver.outInfo.baseType]
 		if resolver.out.Kind() == reflect.Slice {
 			typ = graphql.NewList(typ)
 		}
 	}
 	var args graphql.FieldConfigArgument
 	if resolver.args != nil {
-		args = engine.argConfigs[resolver.args]
+		args = engine.argConfigs[resolver.argsInfo.baseType]
 	}
 	engine.mutation.AddFieldConfig(name, &graphql.Field{
 		Description: description,
@@ -150,9 +176,9 @@ func (engine *Engine) AddSubscription(name string, description string, resolve i
 	}
 	var args graphql.FieldConfigArgument
 	if resolver.args != nil {
-		args = engine.argConfigs[resolver.args]
+		args = engine.argConfigs[resolver.argsInfo.baseType]
 	}
-	typ := engine.types[resolver.outBaseType]
+	typ := engine.types[resolver.outInfo.baseType]
 	if resolver.out.Kind() == reflect.Slice {
 		typ = graphql.NewList(typ)
 	}
@@ -213,7 +239,7 @@ func (engine *Engine) AddPaginationQuery(name, description string, resolveList, 
 	engine.query.AddFieldConfig(name, &graphql.Field{
 		Description: description,
 		Args:        argConfigs,
-		Type:        engine.makePaginationQueryResultObject(listResolver.outBaseType),
+		Type:        engine.makePaginationQueryResultObject(listResolver.outInfo.baseType),
 		Resolve: graphql.ResolveFieldWithContext(func(p graphql.ResolveParams) (interface{}, context.Context, error) {
 			ctx := p.Context
 			args, err := listResolver.buildArgs(p)

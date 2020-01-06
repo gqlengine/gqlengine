@@ -2,6 +2,7 @@
 package gqlengine
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/karfield/graphql"
@@ -18,26 +19,24 @@ type NameAlterableInterface interface {
 
 var interfaceType = reflect.TypeOf((*Interface)(nil)).Elem()
 
-func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*graphql.Interface, bool) {
-	isInterface, isArray, baseType := implementsOf(p, interfaceType)
+func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*graphql.Interface, *unwrappedInfo, error) {
+	isInterface, info, err := implementsOf(p, interfaceType)
+	if err != nil {
+		return nil, &info, err
+	}
 	if !isInterface {
-		return nil, isArray
+		return nil, &info, nil
 	}
 
-	if i, ok := engine.types[baseType]; ok {
-		return i.(*graphql.Interface), isArray
-	}
-
-	structType := baseType
-	if baseType.Kind() == reflect.Ptr {
-		structType = structType.Elem()
+	if i, ok := engine.types[info.baseType]; ok {
+		return i.(*graphql.Interface), &info, nil
 	}
 
 	if prototype == nil {
-		prototype = newPrototype(baseType).(Interface)
+		prototype = newPrototype(info.baseType).(Interface)
 	}
 
-	name := structType.Name()
+	name := info.baseType.Name()
 	if p, ok := prototype.(NameAlterableInterface); ok {
 		name = p.GraphQLInterfaceName()
 	}
@@ -48,12 +47,15 @@ func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*gr
 		Fields:      graphql.Fields{},
 	})
 
-	engine.types[baseType] = intf
+	engine.types[info.baseType] = intf
 
 	fieldsConfig := objectFieldLazyConfig{
 		fields: map[string]objectField{},
 	}
-	engine.objectFields(structType, &fieldsConfig)
+	err = engine.objectFields(info.baseType, &fieldsConfig)
+	if err != nil {
+		return nil, &info, fmt.Errorf("check interface '%s' failed: %E", info.baseType.Name(), err)
+	}
 
 	for name, f := range fieldsConfig.fields {
 		intf.AddFieldConfig(name, &graphql.Field{
@@ -65,10 +67,10 @@ func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*gr
 		})
 	}
 
-	return intf, isArray
+	return intf, &info, nil
 }
 
-func (engine *Engine) asInterfaceFromPrototype(prototype Interface) *graphql.Interface {
-	i, _ := engine.collectInterface(reflect.TypeOf(prototype), prototype)
-	return i
+func (engine *Engine) asInterfaceFromPrototype(prototype Interface) (*graphql.Interface, error) {
+	i, _, err := engine.collectInterface(reflect.TypeOf(prototype), prototype)
+	return i, err
 }
