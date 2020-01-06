@@ -24,21 +24,16 @@ type CustomParserInput interface {
 
 var _inputType = reflect.TypeOf((*Input)(nil)).Elem()
 
-func (engine *Engine) collectInput(baseType reflect.Type) (graphql.Type, error) {
-	if input, ok := engine.types[baseType]; ok {
+func (engine *Engine) collectInput(info *unwrappedInfo) (graphql.Type, error) {
+	if input, ok := engine.types[info.baseType]; ok {
 		if input != nil {
 			return input, nil
 		}
-		return nil, fmt.Errorf("loop-referred input object %s", baseType.String())
+		return nil, fmt.Errorf("loop-referred input object %s", info.baseType.String())
 	}
-	structType := baseType
-	if baseType.Kind() == reflect.Ptr {
-		structType = baseType.Elem()
-	}
-
 	fields := graphql.InputObjectConfigFieldMap{}
-	for i := 0; i < structType.NumField(); i++ {
-		f := structType.Field(i)
+	for i := 0; i < info.baseType.NumField(); i++ {
+		f := info.baseType.Field(i)
 
 		fieldType, _, err := checkField(&f, engine.inputFieldCheckers, "input field")
 		if err != nil {
@@ -59,8 +54,8 @@ func (engine *Engine) collectInput(baseType reflect.Type) (graphql.Type, error) 
 		}
 	}
 
-	input := newPrototype(baseType).(Input)
-	name := structType.Name()
+	input := newPrototype(info.implType).(Input)
+	name := info.baseType.Name()
 	if rename, ok := input.(NameAlterableInput); ok {
 		name = rename.GraphQLInputName()
 	}
@@ -77,7 +72,7 @@ func (engine *Engine) collectInput(baseType reflect.Type) (graphql.Type, error) 
 		ParseValue:  parseValue,
 	})
 
-	engine.types[baseType] = d
+	engine.types[info.baseType] = d
 	return d, nil
 }
 
@@ -89,7 +84,7 @@ func (engine *Engine) asInputField(field *reflect.StructField) (graphql.Type, *u
 	if !isInput {
 		return nil, &info, nil
 	}
-	gtype, err := engine.collectInput(info.baseType)
+	gtype, err := engine.collectInput(&info)
 	if err != nil {
 		return nil, &info, err
 	}

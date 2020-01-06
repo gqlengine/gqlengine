@@ -26,17 +26,14 @@ type NameAlterableScalar interface {
 
 var scalarType = reflect.TypeOf((*Scalar)(nil)).Elem()
 
-func (engine *Engine) collectCustomScalar(baseType reflect.Type) graphql.Type {
-	if s, ok := engine.types[baseType]; ok {
+func (engine *Engine) collectCustomScalar(info *unwrappedInfo) graphql.Type {
+	if s, ok := engine.types[info.baseType]; ok {
 		return s
 	}
 
-	scalar := newPrototype(baseType).(Scalar)
+	scalar := newPrototype(info.baseType).(Scalar)
 
-	name := baseType.Name()
-	if baseType.Kind() == reflect.Ptr {
-		name = baseType.Elem().Name()
-	}
+	name := info.baseType.Name()
 	if v, ok := scalar.(NameAlterableScalar); ok {
 		name = v.GraphQLScalarName()
 	}
@@ -57,7 +54,7 @@ func (engine *Engine) collectCustomScalar(baseType reflect.Type) graphql.Type {
 		ParseValue:   scalar.GraphQLScalarParseValue,
 		ParseLiteral: literalParsing,
 	})
-	engine.types[baseType] = d
+	engine.types[info.baseType] = d
 	return d
 }
 
@@ -69,7 +66,7 @@ func (engine *Engine) asCustomScalarField(field *reflect.StructField) (graphql.T
 	if !isScalar {
 		return nil, &info, nil
 	}
-	gtype := engine.collectCustomScalar(info.baseType)
+	gtype := engine.collectCustomScalar(&info)
 	if info.array {
 		gtype = graphql.NewList(gtype)
 	}
@@ -84,6 +81,6 @@ func (engine *Engine) asCustomScalarResult(out reflect.Type) (*unwrappedInfo, er
 	if !isScalar {
 		return nil, nil
 	}
-	engine.collectCustomScalar(info.baseType)
+	engine.collectCustomScalar(&info)
 	return &info, nil
 }

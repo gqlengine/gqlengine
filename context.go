@@ -60,7 +60,7 @@ func (engine *Engine) asContextArgument(p reflect.Type) (*contextBuilder, error)
 	}
 
 	if _, ok := engine.reqCtx[info.baseType]; !ok {
-		engine.reqCtx[info.baseType] = struct{}{}
+		engine.reqCtx[info.baseType] = info.implType
 	}
 
 	return &contextBuilder{
@@ -81,7 +81,7 @@ func (engine *Engine) asContextMerger(p reflect.Type) (bool, error) {
 	}
 
 	if _, ok := engine.respCtx[info.baseType]; !ok {
-		engine.respCtx[info.baseType] = struct{}{}
+		engine.respCtx[info.baseType] = info.implType
 	}
 
 	return true, nil
@@ -90,8 +90,8 @@ func (engine *Engine) asContextMerger(p reflect.Type) (bool, error) {
 func (engine *Engine) handleRequestContexts(r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	var errs []error
-	for reqCtxType := range engine.reqCtx {
-		req := newPrototype(reqCtxType).(RequestContext)
+	for reqCtxType, reqCtxImplType := range engine.reqCtx {
+		req := newPrototype(reqCtxImplType).(RequestContext)
 		err := req.GraphQLContextFromHTTPRequest(r)
 		if err != nil {
 			errs = append(errs, err)
@@ -115,8 +115,8 @@ func (engine *Engine) handleRequestContexts(r *http.Request) (context.Context, e
 func (engine *Engine) handleFastHttpRequestContexts(r *fasthttp.RequestCtx) (context.Context, error) {
 	var ctx context.Context = r
 	var errs []error
-	for reqCtxType := range engine.reqCtx {
-		req := newPrototype(reqCtxType).(FastRequestContext)
+	for reqCtxType, reqCtxImplType := range engine.reqCtx {
+		req := newPrototype(reqCtxImplType).(FastRequestContext)
 		err := req.GraphQLContextFromFastHTTPRequest(r)
 		if err != nil {
 			errs = append(errs, err)

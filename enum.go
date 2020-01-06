@@ -26,11 +26,11 @@ type NameAlterableEnum interface {
 
 var enumType = reflect.TypeOf((*Enum)(nil)).Elem()
 
-func (engine *Engine) collectEnum(baseType reflect.Type) graphql.Type {
-	if d, ok := engine.types[baseType]; ok {
+func (engine *Engine) collectEnum(info *unwrappedInfo) graphql.Type {
+	if d, ok := engine.types[info.baseType]; ok {
 		return d
 	}
-	enum := newPrototype(baseType).(Enum)
+	enum := newPrototype(info.implType).(Enum)
 
 	values := graphql.EnumValueConfigMap{}
 	for valName, def := range enum.GraphQLEnumValues() {
@@ -40,10 +40,7 @@ func (engine *Engine) collectEnum(baseType reflect.Type) graphql.Type {
 		}
 	}
 
-	name := baseType.Name()
-	if baseType.Kind() == reflect.Ptr {
-		name = baseType.Elem().Name()
-	}
+	name := info.baseType.Name()
 	if rename, ok := enum.(NameAlterableEnum); ok {
 		name = rename.GraphQLEnumName()
 	}
@@ -53,7 +50,7 @@ func (engine *Engine) collectEnum(baseType reflect.Type) graphql.Type {
 		Description: enum.GraphQLEnumDescription(),
 		Values:      values,
 	})
-	engine.types[baseType] = d
+	engine.types[info.baseType] = d
 	return d
 }
 
@@ -65,7 +62,7 @@ func (engine *Engine) asEnumField(field *reflect.StructField) (graphql.Type, *un
 	if !isEnum {
 		return nil, &info, nil
 	}
-	var gType = engine.collectEnum(info.baseType)
+	var gType = engine.collectEnum(&info)
 	if info.array {
 		gType = graphql.NewList(gType)
 	}
@@ -80,6 +77,6 @@ func (engine *Engine) asEnumResult(out reflect.Type) (*unwrappedInfo, error) {
 	if !isEnum {
 		return nil, nil
 	}
-	engine.collectEnum(info.baseType)
+	engine.collectEnum(&info)
 	return &info, nil
 }

@@ -114,15 +114,14 @@ func (c *objectFieldLazyConfig) getFields(obj reflect.Type, engine *Engine) grap
 	}
 }
 
-func (engine *Engine) collectObject(baseType reflect.Type) (graphql.Type, error) {
-	if obj, ok := engine.types[baseType]; ok {
+func (engine *Engine) collectObject(info *unwrappedInfo) (graphql.Type, error) {
+	if obj, ok := engine.types[info.baseType]; ok {
 		return obj, nil
 	}
-	structType := baseType
 
-	prototype := newPrototype(baseType).(Object)
+	prototype := newPrototype(info.implType).(Object)
 
-	name := structType.Name()
+	name := info.baseType.Name()
 	if rename, ok := prototype.(NameAlterableObject); ok {
 		name = rename.GraphQLObjectName()
 	}
@@ -136,13 +135,12 @@ func (engine *Engine) collectObject(baseType reflect.Type) (graphql.Type, error)
 		if info.array {
 			return nil, fmt.Errorf("delegated prototype should not be non-struct")
 		}
-		structType = info.baseType
 	}
 
 	fieldsConfig := objectFieldLazyConfig{
 		fields: map[string]objectField{},
 	}
-	err := engine.objectFields(structType, &fieldsConfig)
+	err := engine.objectFields(info.baseType, &fieldsConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +151,7 @@ func (engine *Engine) collectObject(baseType reflect.Type) (graphql.Type, error)
 			intf, err := engine.asInterfaceFromPrototype(intfPrototype)
 			if err != nil {
 				return nil, fmt.Errorf("check type '%s' implemented infterface '%s' failed %E",
-					baseType.Name(), reflect.TypeOf(intfPrototype).Name(), err)
+					info.baseType.Name(), reflect.TypeOf(intfPrototype).Name(), err)
 			}
 			intfs = append(intfs, intf)
 		}
@@ -162,10 +160,10 @@ func (engine *Engine) collectObject(baseType reflect.Type) (graphql.Type, error)
 	preassigned := graphql.NewObject(graphql.ObjectConfig{
 		Name:        name,
 		Description: prototype.GraphQLObjectDescription(),
-		Fields:      fieldsConfig.getFields(baseType, engine),
+		Fields:      fieldsConfig.getFields(info.baseType, engine),
 		Interfaces:  intfs,
 	})
-	engine.types[baseType] = preassigned
+	engine.types[info.baseType] = preassigned
 
 	return preassigned, nil
 }
@@ -178,7 +176,7 @@ func (engine *Engine) asObjectSource(p reflect.Type) (resolverArgumentBuilder, *
 	if !isObj {
 		return nil, &info, nil
 	}
-	engine.collectObject(info.baseType)
+	engine.collectObject(&info)
 	return &objectSourceBuilder{
 		unwrappedInfo: info,
 	}, &info, nil
@@ -192,7 +190,7 @@ func (engine *Engine) asObjectResult(p reflect.Type) (*unwrappedInfo, error) {
 	if !isObj {
 		return nil, nil
 	}
-	_, err = engine.collectObject(info.baseType)
+	_, err = engine.collectObject(&info)
 	if err != nil {
 		return &info, err
 	}
@@ -207,7 +205,7 @@ func (engine *Engine) asObjectField(field *reflect.StructField) (graphql.Type, *
 	if !isObj {
 		return nil, &info, nil
 	}
-	typ, err := engine.collectObject(info.baseType)
+	typ, err := engine.collectObject(&info)
 	if err != nil {
 		return nil, &info, err
 	}

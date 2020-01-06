@@ -33,7 +33,7 @@ func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*gr
 	}
 
 	if prototype == nil {
-		prototype = newPrototype(info.baseType).(Interface)
+		prototype = newPrototype(info.implType).(Interface)
 	}
 
 	name := info.baseType.Name()

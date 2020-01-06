@@ -19,8 +19,8 @@ type Engine struct {
 	types          map[reflect.Type]graphql.Type
 	idTypes        map[reflect.Type]struct{}
 	argConfigs     map[reflect.Type]graphql.FieldConfigArgument
-	reqCtx         map[reflect.Type]struct{}
-	respCtx        map[reflect.Type]struct{}
+	reqCtx         map[reflect.Type]reflect.Type
+	respCtx        map[reflect.Type]reflect.Type
 	objResolvers   map[reflect.Type]objectResolvers
 	batchResolvers map[reflect.Type]objectResolvers
 
@@ -39,8 +39,8 @@ func NewEngine(options Options) *Engine {
 		types:          map[reflect.Type]graphql.Type{},
 		idTypes:        map[reflect.Type]struct{}{},
 		argConfigs:     map[reflect.Type]graphql.FieldConfigArgument{},
-		reqCtx:         map[reflect.Type]struct{}{},
-		respCtx:        map[reflect.Type]struct{}{},
+		reqCtx:         map[reflect.Type]reflect.Type{},
+		respCtx:        map[reflect.Type]reflect.Type{},
 		objResolvers:   map[reflect.Type]objectResolvers{},
 		batchResolvers: map[reflect.Type]objectResolvers{},
 	}
