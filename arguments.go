@@ -96,6 +96,6 @@ func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, *unwrapp
 	}
 	return &argumentsBuilder{
 		ptr: arg.Kind() == reflect.Ptr,
-		typ: arg,
+		typ: info.baseType,
 	}, &info, nil
 }
