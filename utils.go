@@ -384,3 +384,34 @@ func checkField(field *reflect.StructField, checkers []fieldChecker, errString s
 	}
 	return nil, nil, fmt.Errorf("unsupported type('%s') for %s '%s'", field.Type.String(), errString, field.Name)
 }
+
+func newNonNull(t graphql.Type) graphql.Type {
+	if _, ok := t.(*graphql.NonNull); !ok {
+		t = graphql.NewNonNull(t)
+	}
+	return t
+}
+
+func newList(t graphql.Type) graphql.Type {
+	if _, ok := t.(*graphql.List); !ok {
+		t = graphql.NewList(t)
+	}
+	return t
+}
+
+func wrapType(field *reflect.StructField, t graphql.Type, isArray bool) graphql.Type {
+	if isArray {
+		if isElementRequired(field) {
+			t = newNonNull(t)
+		}
+		t = newList(t)
+		if isRequired(field) {
+			t = newNonNull(t)
+		}
+	} else {
+		if isRequired(field) {
+			t = newNonNull(t)
+		}
+	}
+	return t
+}

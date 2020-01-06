@@ -77,14 +77,7 @@ func asBuiltinScalar(field *reflect.StructField) (graphql.Type, *unwrappedInfo, 
 		return nil, &info, nil
 	}
 
-	if info.array {
-		scalar = graphql.NewList(scalar)
-	}
-
-	if isRequired(field) {
-		scalar = graphql.NewNonNull(scalar)
-	}
-
+	scalar = wrapType(field, scalar, info.array)
 	return scalar, &info, nil
 }
 

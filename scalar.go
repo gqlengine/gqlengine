@@ -67,10 +67,7 @@ func (engine *Engine) asCustomScalarField(field *reflect.StructField) (graphql.T
 		return nil, &info, nil
 	}
 	gtype := engine.collectCustomScalar(&info)
-	if info.array {
-		gtype = graphql.NewList(gtype)
-	}
-	return gtype, &info, nil
+	return wrapType(field, gtype, info.array), &info, nil
 }
 
 func (engine *Engine) asCustomScalarResult(out reflect.Type) (*unwrappedInfo, error) {

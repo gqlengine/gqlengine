@@ -216,8 +216,5 @@ func (engine *Engine) asObjectField(field *reflect.StructField) (graphql.Type, *
 	if err != nil {
 		return nil, &info, err
 	}
-	if info.array {
-		typ = graphql.NewList(typ)
-	}
-	return typ, &info, nil
+	return wrapType(field, typ, info.array), &info, nil
 }

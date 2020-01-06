@@ -42,11 +42,7 @@ func (engine *Engine) asIdField(field *reflect.StructField) (graphql.Type, *unwr
 	}
 
 	engine.collectIdType(info.baseType)
-	if info.array {
-		return graphql.NewNonNull(graphql.ID), &info, nil
-	} else {
-		return graphql.ID, &info, nil
-	}
+	return wrapType(field, graphql.ID, info.array), &info, nil
 }
 
 func (engine *Engine) asIdResult(out reflect.Type) (*unwrappedInfo, error) {

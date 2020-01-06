@@ -63,9 +63,7 @@ func (engine *Engine) asEnumField(field *reflect.StructField) (graphql.Type, *un
 		return nil, &info, nil
 	}
 	var gType = engine.collectEnum(&info)
-	if info.array {
-		gType = graphql.NewList(gType)
-	}
+	gType = wrapType(field, gType, info.array)
 	return gType, &info, nil
 }
 

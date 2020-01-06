@@ -61,9 +61,6 @@ func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) error {
 		if gType == nil {
 			return fmt.Errorf("unsupported type '%s' for argument[%d] '%s'", baseType.Name(), i, f.Name)
 		}
-		if isRequired(&f) {
-			gType = graphql.NewNonNull(gType)
-		}
 
 		name := fieldName(&f)
 		value, err := defaultValue(&f)

@@ -9,20 +9,23 @@ import (
 	"github.com/iancoleman/strcase"
 )
 
-func isRequired(field *reflect.StructField) bool {
-	v, ok := field.Tag.Lookup("gqlRequired")
+func boolTag(field *reflect.StructField, tagName string) bool {
+	v, ok := field.Tag.Lookup(tagName)
 	if !ok {
 		return false
 	}
 	if v == "" {
 		return true
 	}
-	required, err := strconv.ParseBool(v)
+	positive, err := strconv.ParseBool(v)
 	if err != nil {
 		return false
 	}
-	return required
+	return positive
 }
+
+func isRequired(field *reflect.StructField) bool        { return boolTag(field, "gqlRequired") }
+func isElementRequired(field *reflect.StructField) bool { return boolTag(field, "gqlElementRequired") }
 
 func desc(field *reflect.StructField) string {
 	return field.Tag.Get("gqlDesc")
@@ -35,20 +38,7 @@ func defaultValue(field *reflect.StructField) (interface{}, error) {
 	return nil, nil
 }
 
-func isIgnored(field *reflect.StructField) bool {
-	v, ok := field.Tag.Lookup("gqlIgnored")
-	if !ok {
-		return false
-	}
-	if v == "" {
-		return true
-	}
-	ignored, err := strconv.ParseBool(v)
-	if err != nil {
-		return false
-	}
-	return ignored
-}
+func isIgnored(field *reflect.StructField) bool { return boolTag(field, "gqlIgnored") }
 
 func fieldName(field *reflect.StructField) string {
 	name := ""

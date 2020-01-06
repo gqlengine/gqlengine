@@ -88,8 +88,5 @@ func (engine *Engine) asInputField(field *reflect.StructField) (graphql.Type, *u
 	if err != nil {
 		return nil, &info, err
 	}
-	if info.array {
-		gtype = graphql.NewList(gtype)
-	}
-	return gtype, &info, nil
+	return wrapType(field, gtype, info.array), &info, nil
 }
