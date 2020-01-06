@@ -94,25 +94,24 @@ func implementsOf(p reflect.Type, intf reflect.Type) (implemented bool, info unw
 			info.array = false
 		}
 	default:
-		if !isBaseType(p) {
-			err = fmt.Errorf("'%s' is not a base type", p.String())
-		}
-		implemented = p.Implements(intf)
-		if implemented {
-			info.implType = p
-			info.baseType = p
-		}
-		// try ptr
-		pp := reflect.New(p).Type()
-		info.ptrType = pp
-		if implemented {
-			return
-		}
+		if isBaseType(p) {
+			implemented = p.Implements(intf)
+			if implemented {
+				info.implType = p
+				info.baseType = p
+			}
+			// try ptr
+			pp := reflect.New(p).Type()
+			info.ptrType = pp
+			if implemented {
+				return
+			}
 
-		implemented = pp.Implements(intf)
-		if implemented {
-			info.implType = pp
-			info.baseType = p
+			implemented = pp.Implements(intf)
+			if implemented {
+				info.implType = pp
+				info.baseType = p
+			}
 		}
 	}
 	return
