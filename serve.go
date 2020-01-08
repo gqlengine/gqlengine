@@ -41,6 +41,9 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (engine *Engine) ServeWebsocket(w http.ResponseWriter, r *http.Request) {
 	upgrader := ws.HTTPUpgrader{
 		Protocol: func(s string) bool {
+			if engine.opts.WsSubProtocol != "" {
+				return s == engine.opts.WsSubProtocol
+			}
 			return s == "graphql-ws"
 		},
 	}

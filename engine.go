@@ -11,7 +11,7 @@ import (
 
 type Engine struct {
 	initialized    bool
-	enableTracing  bool
+	opts           Options
 	schema         graphql.Schema
 	query          *graphql.Object
 	mutation       *graphql.Object
@@ -31,12 +31,13 @@ type Engine struct {
 }
 
 type Options struct {
-	Tracing bool
+	Tracing       bool
+	WsSubProtocol string
 }
 
 func NewEngine(options Options) *Engine {
 	engine := &Engine{
-		enableTracing:  options.Tracing,
+		opts:           options,
 		types:          map[reflect.Type]graphql.Type{},
 		idTypes:        map[reflect.Type]struct{}{},
 		argConfigs:     map[reflect.Type]graphql.FieldConfigArgument{},
@@ -77,7 +78,7 @@ func (engine *Engine) Init() (err error) {
 	}
 
 	var extensions []graphql.Extension
-	if engine.enableTracing {
+	if engine.opts.Tracing {
 		extensions = append(extensions, &tracingExtension{})
 	}
 
