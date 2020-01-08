@@ -8,8 +8,6 @@ import (
 	"github.com/gobwas/ws"
 
 	"github.com/karfield/graphql"
-
-	"github.com/valyala/fasthttp"
 )
 
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -40,12 +38,14 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (engine *Engine) ServeFastHTTP(ctx *fasthttp.RequestCtx) {
-
-}
-
 func (engine *Engine) ServeWebsocket(w http.ResponseWriter, r *http.Request) {
-	conn, _, _, err := ws.UpgradeHTTP(r, w)
+	upgrader := ws.HTTPUpgrader{
+		Protocol: func(s string) bool {
+			return s == "graphql-ws"
+		},
+	}
+	//conn, _, _, err := ws.UpgradeHTTP(r, w)
+	conn, _, _, err := upgrader.Upgrade(r, w)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

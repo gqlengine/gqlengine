@@ -30,7 +30,7 @@ func (s *subscriptionFeedback) SendData(data interface{}) error {
 	if d.baseType != s.result.baseType {
 		return fmt.Errorf("send %s only not %s", s.result.baseType, d.baseType)
 	}
-	if d.array == s.result.array {
+	if d.array != s.result.array {
 		if s.result.array {
 			return fmt.Errorf("requires []%s", s.result.implType)
 		}
@@ -44,10 +44,13 @@ func (s *subscriptionFeedback) Close() error {
 	return nil
 }
 
-type subscriptionArgBuilder struct{}
+type subscriptionArgBuilder struct {
+	result *unwrappedInfo
+}
 
 func (s *subscriptionArgBuilder) build(p graphql.ResolveParams) (reflect.Value, error) {
-	feedback := p.Context.Value(wsCtxKey{})
+	feedback := p.Context.Value(wsCtxKey{}).(*subscriptionFeedback)
+	feedback.result = s.result
 	return reflect.ValueOf(feedback), nil
 }
 
@@ -55,14 +58,7 @@ func (engine *Engine) asSubscriptionArg(p reflect.Type) (*subscriptionArgBuilder
 	if p == subscriptionType {
 		return &subscriptionArgBuilder{}, nil
 	}
-	isSub, _, err := implementsOf(p, subscriptionType)
-	if err != nil {
-		return nil, err
-	}
-	if !isSub {
-		return nil, nil
-	}
-	return &subscriptionArgBuilder{}, nil
+	return nil, nil
 }
 
 type subscriptionHandler struct {
@@ -87,6 +83,7 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 		return nil, fmt.Errorf("onSubscribed is not a function")
 	}
 	h.onSubArgs = make([]resolverArgumentBuilder, subFnType.NumIn())
+	var subBuilder *subscriptionArgBuilder
 	for i := 0; i < subFnType.NumIn(); i++ {
 		in := subFnType.In(i)
 
@@ -110,7 +107,8 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 			continue
 		}
 
-		if subBuilder, err := engine.asSubscriptionArg(in); err != nil {
+		var err error
+		if subBuilder, err = engine.asSubscriptionArg(in); err != nil {
 			return nil, err
 		} else if subBuilder != nil {
 			h.onSubArgs[i] = subBuilder
@@ -125,6 +123,9 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 		if obj, err := engine.asObjectResult(out); err != nil {
 			return nil, err
 		} else if obj != nil {
+			if subBuilder != nil {
+				subBuilder.result = obj
+			}
 			h.result = engine.types[obj.baseType]
 			continue
 		}

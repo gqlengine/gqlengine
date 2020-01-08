@@ -45,6 +45,7 @@ type subscriptionFeedback struct {
 	encoder  *json.Encoder
 	finalize func()
 	result   *unwrappedInfo
+	w        *wsutil.Writer
 }
 
 func (s *subscriptionFeedback) close() {
@@ -73,22 +74,17 @@ func (s *subscriptionFeedback) send(data interface{}) error {
 	defer s.mu.Unlock()
 
 	if s.encoder != nil {
-		return s.encoder.Encode(wsMessage{
+		err = s.encoder.Encode(wsMessage{
 			ID:      s.id,
 			Type:    gqlData,
 			Payload: payload,
 		})
+		if err != nil {
+			return err
+		}
+		return s.w.Flush()
 	}
 	return fmt.Errorf("ws channel(#%s) closed", s.id)
-}
-
-func message(id, typ string, payload interface{}) wsMessage {
-	data, _ := json.Marshal(payload)
-	return wsMessage{
-		ID:      id,
-		Type:    typ,
-		Payload: data,
-	}
 }
 
 func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
@@ -106,9 +102,7 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 
 	for {
 		r := wsutil.NewReader(conn, ws.StateServerSide)
-		w := wsutil.NewWriter(conn, ws.StateServerSide, ws.OpText)
 		decoder := json.NewDecoder(r)
-		encoder := json.NewEncoder(w)
 
 		hdr, err := r.NextFrame()
 		if err != nil {
@@ -123,6 +117,22 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 			return
 		}
 
+		w := wsutil.NewWriter(conn, ws.StateServerSide, ws.OpText)
+		encoder := json.NewEncoder(w)
+
+		message := func(typ string, payload interface{}) error {
+			data, _ := json.Marshal(payload)
+			err := encoder.Encode(wsMessage{
+				ID:      op.ID,
+				Type:    typ,
+				Payload: data,
+			})
+			if err != nil {
+				return err
+			}
+			return w.Flush()
+		}
+
 		switch op.Type {
 		case gqlConnectionInit:
 			auth := struct {
@@ -130,14 +140,14 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 			}{}
 			err = json.Unmarshal(op.Payload, &auth)
 			if err != nil {
-				encoder.Encode(message(op.ID, gqlConnectionError, err.Error()))
+				message(gqlConnectionError, err.Error())
 				return
 			}
 
 			if engine.authSubscriptionToken != nil {
 				ctx, err = engine.authSubscriptionToken(auth.AuthToken)
 				if err != nil {
-					encoder.Encode(message(op.ID, gqlConnectionError, err.Error()))
+					message(gqlConnectionError, err.Error())
 					return
 				}
 			}
@@ -146,7 +156,7 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 				Type: gqlConnectionAck,
 			})
 			if err != nil {
-				//encoder.Encode(message(op.ID, gqlConnectionError, err.Error()))
+				//message(gqlConnectionError, err.Error()))
 				return
 			}
 
@@ -160,13 +170,14 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 				OperationName string                 `json:"operationName"`
 			}{}
 			if err := json.Unmarshal(op.Payload, &payload); err != nil {
-				_ = encoder.Encode(message(op.ID, gqlError, err.Error()))
+				message(gqlError, err.Error())
 				continue
 			}
 
 			fb := &subscriptionFeedback{
 				id:      op.ID,
 				encoder: encoder,
+				w:       w,
 			}
 			ctx = context.WithValue(ctx, wsCtxKey{}, fb)
 
@@ -182,12 +193,15 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 				// do nothing
 				r := subCtx.(*subInitResult)
 				if r.err != nil {
-					_ = encoder.Encode(message(op.ID, gqlError, r.err.Error()))
+					_ = message(gqlError, r.err.Error())
 				} else {
+					fb.w = w
 					fb.finalize = r.finalize
 					mu.Lock()
 					sessions[op.ID] = fb
 					mu.Unlock()
+
+					_ = message(gqlData, nil)
 				}
 			} else {
 				_ = encoder.Encode(result)
@@ -198,7 +212,7 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 				ID string `json:"id"`
 			}{}
 			if err := json.Unmarshal(op.Payload, &payload); err != nil {
-				_ = encoder.Encode(message(op.ID, gqlError, err.Error()))
+				_ = message(gqlError, err.Error())
 				continue
 			}
 
@@ -210,7 +224,7 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 			mu.Unlock()
 
 			// tell client no more messages from this ID
-			_ = encoder.Encode(message(payload.ID, gqlComplete, fmt.Sprintf(`{"id": "%s"}`, payload.ID)))
+			_ = message(gqlComplete, fmt.Sprintf(`{"id": "%s"}`, payload.ID))
 
 		default:
 
