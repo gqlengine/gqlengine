@@ -52,6 +52,9 @@ func (s *subscriptionArgBuilder) build(p graphql.ResolveParams) (reflect.Value, 
 }
 
 func (engine *Engine) asSubscriptionArg(p reflect.Type) (*subscriptionArgBuilder, error) {
+	if p == subscriptionType {
+		return &subscriptionArgBuilder{}, nil
+	}
 	isSub, _, err := implementsOf(p, subscriptionType)
 	if err != nil {
 		return nil, err
@@ -91,12 +94,12 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 				return nil, err
 			}
 			if h.args != nil {
-				return nil, fmt.Errorf("more than one arguments object at arg[%d]: %s", i, in.String())
+				return nil, fmt.Errorf("more than one arguments object at onSubscribed() arg[%d]: %s", i, in.String())
 			}
 			h.onSubArgs[i] = argsBuilder
 			h.args, err = engine.collectFieldArgumentConfig(info.baseType)
 			if err != nil {
-				return nil, fmt.Errorf("illegal arguments(%s) object in argument[%d]", in.String(), i)
+				return nil, fmt.Errorf("illegal onSubscribed() arguments(%s) object in argument[%d]", in.String(), i)
 			}
 		} else if ctxBuilder, err := engine.asContextArgument(in); err != nil || ctxBuilder != nil {
 			if err != nil {
@@ -109,7 +112,7 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 			}
 			h.onSubArgs[i] = subBuilder
 		} else {
-			return nil, fmt.Errorf("unsupported argument type [%d]: '%s'", i, in)
+			return nil, fmt.Errorf("unsupported onSubscribed() argument type [%d]: '%s'", i, in)
 		}
 	}
 
