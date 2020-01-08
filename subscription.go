@@ -89,35 +89,46 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 	h.onSubArgs = make([]resolverArgumentBuilder, subFnType.NumIn())
 	for i := 0; i < subFnType.NumIn(); i++ {
 		in := subFnType.In(i)
-		if argsBuilder, info, err := engine.asArguments(in); argsBuilder != nil || err != nil {
-			if err != nil {
-				return nil, err
-			}
-			if h.args != nil {
-				return nil, fmt.Errorf("more than one arguments object at onSubscribed() arg[%d]: %s", i, in.String())
-			}
+
+		if argsBuilder, info, err := engine.asArguments(in); err != nil {
+			return nil, err
+		} else if h.args != nil {
+			return nil, fmt.Errorf("more than one arguments object at onSubscribed() arg[%d]: %s", i, in.String())
+		} else if argsBuilder != nil {
 			h.onSubArgs[i] = argsBuilder
 			h.args, err = engine.collectFieldArgumentConfig(info.baseType)
 			if err != nil {
 				return nil, fmt.Errorf("illegal onSubscribed() arguments(%s) object in argument[%d]", in.String(), i)
 			}
-		} else if ctxBuilder, err := engine.asContextArgument(in); err != nil || ctxBuilder != nil {
-			if err != nil {
-				return nil, err
-			}
-			h.onSubArgs[i] = ctxBuilder
-		} else if subBuilder, err := engine.asSubscriptionArg(in); err != nil || subBuilder != nil {
-			if err != nil {
-				return nil, err
-			}
-			h.onSubArgs[i] = subBuilder
-		} else {
-			return nil, fmt.Errorf("unsupported onSubscribed() argument type [%d]: '%s'", i, in)
+			continue
 		}
+
+		if ctxBuilder, err := engine.asContextArgument(in); err != nil {
+			return nil, err
+		} else if ctxBuilder != nil {
+			h.onSubArgs[i] = ctxBuilder
+			continue
+		}
+
+		if subBuilder, err := engine.asSubscriptionArg(in); err != nil {
+			return nil, err
+		} else if subBuilder != nil {
+			h.onSubArgs[i] = subBuilder
+			continue
+		}
+
+		return nil, fmt.Errorf("unsupported onSubscribed() argument type [%d]: '%s'", i, in)
 	}
 
 	for i := 0; i < subFnType.NumOut(); i++ {
 		out := subFnType.Out(i)
+		if obj, err := engine.asObjectResult(out); err != nil {
+			return nil, err
+		} else if obj != nil {
+			h.result = engine.types[obj.baseType]
+			continue
+		}
+
 		if isSession, _, err := implementsOf(out, subscriptionSessionType); err != nil {
 			return nil, err
 		} else if isSession {
@@ -125,16 +136,23 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 				return nil, fmt.Errorf("more than one SubscriptionSession result of onSubscribed(): %s", out)
 			}
 			h.sessionResultIdx = i
-		} else if engine.asErrorResult(out) {
+			continue
+		}
+
+		if engine.asErrorResult(out) {
 			if h.errIdx >= 0 {
 				return nil, fmt.Errorf("more than one error result of onSubscribed(): %s", out)
 			}
 			h.errIdx = i
-		} else {
-			return nil, fmt.Errorf("unsupported onSubscribed result[%d] %s", i, out.String())
+			continue
 		}
+
+		return nil, fmt.Errorf("unsupported onSubscribed result[%d] %s", i, out.String())
 	}
 
+	if h.result == nil {
+		return nil, fmt.Errorf("missing result type in onSubscribed() for prototyping")
+	}
 	h.onSubscribedFn = reflect.ValueOf(onSubscribed)
 
 	// check onUnsubscribed()
