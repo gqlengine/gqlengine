@@ -247,6 +247,12 @@ func (engine *Engine) AddPaginationQuery(name, description string, resolveList, 
 }
 
 func (engine *Engine) AddSubscription(name string, description string, onSubscribed, onUnsubscribed interface{}) error {
+	if engine.subscription == nil {
+		engine.subscription = graphql.NewObject(graphql.ObjectConfig{
+			Name:   "Subscription",
+			Fields: graphql.Fields{},
+		})
+	}
 	handler, err := engine.checkSubscriptionHandler(onSubscribed, onUnsubscribed)
 	if err != nil {
 		return err
