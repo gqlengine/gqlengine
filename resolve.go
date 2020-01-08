@@ -10,7 +10,7 @@ import (
 )
 
 type resolverArgumentBuilder interface {
-	build(params graphql.ResolveParams) (interface{}, error)
+	build(params graphql.ResolveParams) (reflect.Value, error)
 }
 
 const (
@@ -41,7 +41,7 @@ func (r resolver) buildArgs(p graphql.ResolveParams) ([]reflect.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		args[i] = reflect.ValueOf(arg)
+		args[i] = arg
 	}
 	return args, nil
 }

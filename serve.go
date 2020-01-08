@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gobwas/ws"
+
 	"github.com/karfield/graphql"
 
 	"github.com/valyala/fasthttp"
@@ -40,4 +42,18 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (engine *Engine) ServeFastHTTP(ctx *fasthttp.RequestCtx) {
 
+}
+
+func (engine *Engine) ServeWebsocket(w http.ResponseWriter, r *http.Request) {
+	conn, _, _, err := ws.UpgradeHTTP(r, w)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	ctx, err := engine.handleRequestContexts(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	go engine.handleWs(conn, ctx)
 }

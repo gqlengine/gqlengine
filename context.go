@@ -39,12 +39,12 @@ type contextBuilder struct {
 	unwrappedInfo
 }
 
-func (c *contextBuilder) build(params graphql.ResolveParams) (interface{}, error) {
+func (c *contextBuilder) build(params graphql.ResolveParams) (reflect.Value, error) {
 	ctxVal := params.Context.Value(c.ptrType)
 	if ctxVal == nil {
 		ctxVal = params.Context.Value(c.baseType)
 	}
-	return ctxVal, nil
+	return reflect.ValueOf(ctxVal), nil
 }
 
 func (engine *Engine) asContextArgument(p reflect.Type) (*contextBuilder, error) {

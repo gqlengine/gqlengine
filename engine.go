@@ -24,9 +24,10 @@ type Engine struct {
 	objResolvers   map[reflect.Type]objectResolvers
 	batchResolvers map[reflect.Type]objectResolvers
 
-	resultCheckers     []resolveResultChecker
-	inputFieldCheckers []fieldChecker
-	objFieldCheckers   []fieldChecker
+	resultCheckers        []resolveResultChecker
+	inputFieldCheckers    []fieldChecker
+	objFieldCheckers      []fieldChecker
+	authSubscriptionToken func(authToken string) (context.Context, error)
 }
 
 type Options struct {
@@ -74,8 +75,6 @@ func (engine *Engine) Init() (err error) {
 	if engine.initialized {
 		return
 	}
-
-	engine.finalizeObjectResolvers()
 
 	var extensions []graphql.Extension
 	if engine.enableTracing {
@@ -152,37 +151,6 @@ func (engine *Engine) AddMutation(name string, description string, resolve inter
 		args = engine.argConfigs[resolver.argsInfo.baseType]
 	}
 	engine.mutation.AddFieldConfig(name, &graphql.Field{
-		Description: description,
-		Args:        args,
-		Type:        typ,
-		Resolve:     resolver.fn,
-	})
-	return nil
-}
-
-func (engine *Engine) AddSubscription(name string, description string, resolve interface{}) error {
-	if engine.subscription == nil {
-		engine.subscription = graphql.NewObject(graphql.ObjectConfig{
-			Name:   "Subscription",
-			Fields: graphql.Fields{},
-		})
-	}
-	resolver, err := engine.analysisResolver("", resolve)
-	if err != nil {
-		return err
-	}
-	if resolver.out == nil {
-		return fmt.Errorf("missing result of resolver")
-	}
-	var args graphql.FieldConfigArgument
-	if resolver.args != nil {
-		args = engine.argConfigs[resolver.argsInfo.baseType]
-	}
-	typ := engine.types[resolver.outInfo.baseType]
-	if resolver.out.Kind() == reflect.Slice {
-		typ = graphql.NewList(typ)
-	}
-	engine.subscription.AddFieldConfig(name, &graphql.Field{
 		Description: description,
 		Args:        args,
 		Type:        typ,
@@ -278,6 +246,20 @@ func (engine *Engine) AddPaginationQuery(name, description string, resolveList, 
 	return nil
 }
 
-func (engine *Engine) finalizeObjectResolvers() {
-	// FIXME
+func (engine *Engine) AddSubscription(name string, description string, onSubscribed, onUnsubscribed interface{}) error {
+	handler, err := engine.checkSubscriptionHandler(onSubscribed, onUnsubscribed)
+	if err != nil {
+		return err
+	}
+	engine.subscription.AddFieldConfig(name, &graphql.Field{
+		Description: description,
+		Args:        handler.args,
+		Type:        handler.result,
+		Resolve:     graphql.ResolveFieldWithContext(handler.resolve),
+	})
+	return nil
+}
+
+func (engine *Engine) AddSubscriptionAuthentication(auth func(authToken string) (context.Context, error)) {
+	engine.authSubscriptionToken = auth
 }

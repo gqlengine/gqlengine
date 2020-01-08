@@ -20,7 +20,7 @@ type argumentsBuilder struct {
 	typ reflect.Type
 }
 
-func unmarshalArguments(params graphql.ResolveParams, requirePtr bool, typ reflect.Type) (interface{}, error) {
+func unmarshalArguments(params graphql.ResolveParams, requirePtr bool, typ reflect.Type) (reflect.Value, error) {
 	val := reflect.New(typ)
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           val.Interface(),
@@ -31,23 +31,23 @@ func unmarshalArguments(params graphql.ResolveParams, requirePtr bool, typ refle
 		err = decoder.Decode(params.Args)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("unmarshal arguments failed: %E", err)
+		return reflect.Value{}, fmt.Errorf("unmarshal arguments failed: %E", err)
 	}
 	if !requirePtr {
-		return val.Elem().Interface(), nil
+		return val.Elem(), nil
 	}
-	return val.Interface(), nil
+	return val, nil
 }
 
-func (a argumentsBuilder) build(params graphql.ResolveParams) (interface{}, error) {
+func (a argumentsBuilder) build(params graphql.ResolveParams) (reflect.Value, error) {
 	return unmarshalArguments(params, a.ptr, a.typ)
 }
 
 type fieldChecker func(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error)
 
-func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) error {
+func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) (graphql.FieldConfigArgument, error) {
 	if _, ok := engine.argConfigs[baseType]; ok {
-		return nil
+		return nil, nil
 	}
 
 	defs := graphql.FieldConfigArgument{}
@@ -56,16 +56,16 @@ func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) error {
 
 		gType, _, err := checkField(&f, engine.inputFieldCheckers, "argument")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if gType == nil {
-			return fmt.Errorf("unsupported type '%s' for argument[%d] '%s'", baseType.Name(), i, f.Name)
+			return nil, fmt.Errorf("unsupported type '%s' for argument[%d] '%s'", baseType.Name(), i, f.Name)
 		}
 
 		name := fieldName(&f)
 		value, err := defaultValue(&f)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		defs[name] = &graphql.ArgumentConfig{
@@ -76,7 +76,7 @@ func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) error {
 	}
 
 	engine.argConfigs[baseType] = defs
-	return nil
+	return defs, nil
 }
 
 func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, *unwrappedInfo, error) {
@@ -90,7 +90,7 @@ func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, *unwrapp
 	if info.array {
 		return nil, &info, fmt.Errorf("arguments object should not be a slice/array")
 	}
-	err = engine.collectFieldArgumentConfig(info.baseType)
+	_, err = engine.collectFieldArgumentConfig(info.baseType)
 	if err != nil {
 		return nil, &info, err
 	}

@@ -33,8 +33,8 @@ type objectSourceBuilder struct {
 	unwrappedInfo
 }
 
-func (o *objectSourceBuilder) build(params graphql.ResolveParams) (interface{}, error) {
-	return params.Source, nil
+func (o *objectSourceBuilder) build(params graphql.ResolveParams) (reflect.Value, error) {
+	return reflect.ValueOf(params.Source), nil
 }
 
 type objectResolvers map[string]graphql.FieldResolveFn
