@@ -86,13 +86,14 @@ func (engine *Engine) enableQueryTags() {
 					getEntries := func(object *graphql.Object) {
 						fieldMap := object.FieldMap()
 						for name := range ents.queries {
-							f := fieldMap[name]
-							entry := tagEntry{
-								Type:      "query",
-								FieldName: name,
-								Field:     f,
+							if f, ok := fieldMap[name]; ok {
+								entry := tagEntry{
+									Type:      "query",
+									FieldName: name,
+									Field:     f,
+								}
+								entries = append(entries, entry)
 							}
-							entries = append(entries, entry)
 						}
 					}
 					if len(ents.queries) > 0 {
@@ -104,7 +105,7 @@ func (engine *Engine) enableQueryTags() {
 					if len(ents.subscriptions) > 0 {
 						getEntries(engine.schema.SubscriptionType())
 					}
-					tags = append(tags, &tag{Name: t})
+					tags = append(tags, &tag{Name: t, Entries: entries})
 				}
 			}
 			return tags, nil
