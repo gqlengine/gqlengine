@@ -67,7 +67,7 @@ func (t *tagEntries) add(op int, name string) {
 	(*m)[name] = struct{}{}
 }
 
-func (engine *Engine) queryTags() {
+func (engine *Engine) enableQueryTags() {
 	if engine.query == nil {
 		engine.query = graphql.NewObject(graphql.ObjectConfig{
 			Name:   "Query",

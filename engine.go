@@ -36,6 +36,7 @@ type Engine struct {
 type Options struct {
 	Tracing       bool
 	WsSubProtocol string
+	Tags          bool
 }
 
 func NewEngine(options Options) *Engine {
@@ -87,6 +88,10 @@ func (engine *Engine) Init() (err error) {
 				return err
 			}
 		}
+	}
+
+	if engine.opts.Tags {
+		engine.enableQueryTags()
 	}
 
 	var extensions []graphql.Extension
