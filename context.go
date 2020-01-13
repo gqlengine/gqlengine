@@ -68,23 +68,23 @@ func (engine *Engine) asContextArgument(p reflect.Type) (*contextBuilder, error)
 	}, nil
 }
 
-func (engine *Engine) asContextMerger(p reflect.Type) (bool, error) {
+func (engine *Engine) asContextMerger(p reflect.Type) (bool, *unwrappedInfo, error) {
 	isCtx, info, err := implementsOf(p, _responseContextType)
 	if err != nil {
-		return false, err
+		return false, &info, err
 	}
 	if !isCtx {
-		return false, nil
+		return false, &info, nil
 	}
 	if info.array {
-		return false, fmt.Errorf("response context result('%s') should not be a slice", p.String())
+		return false, &info, fmt.Errorf("response context result('%s') should not be a slice", p.String())
 	}
 
 	if _, ok := engine.respCtx[info.baseType]; !ok {
 		engine.respCtx[info.baseType] = info.implType
 	}
 
-	return true, nil
+	return true, &info, nil
 }
 
 func (engine *Engine) handleRequestContexts(r *http.Request) (context.Context, error) {
@@ -136,6 +136,12 @@ func (engine *Engine) handleFastHttpRequestContexts(r *fasthttp.RequestCtx) (con
 	}
 	return ctx, nil
 }
+
+type contextResultBuilder struct {
+	info *unwrappedInfo
+}
+
+func (c *contextResultBuilder) isResultBuilder() {}
 
 func (engine *Engine) finalizeContexts(ctx context.Context, w http.ResponseWriter) error {
 	var errs []error

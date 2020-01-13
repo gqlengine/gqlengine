@@ -13,11 +13,17 @@ type resolverArgumentBuilder interface {
 	build(params graphql.ResolveParams) (reflect.Value, error)
 }
 
-const (
-	returnResult = iota + 1
-	returnError
-	returnContext
+type resolverResultBuilder interface {
+	isResultBuilder()
+}
+
+type (
+	returnedResultBuilder int
+	errorResultBuilder    int
 )
+
+func (r returnedResultBuilder) isResultBuilder() {}
+func (r errorResultBuilder) isResultBuilder()    {}
 
 type resolver struct {
 	fn             graphql.ResolveFieldWithContext
@@ -30,7 +36,7 @@ type resolver struct {
 	sourceInfo     *unwrappedInfo
 	out            reflect.Type
 	outInfo        *unwrappedInfo
-	resultBuilders []int
+	resultBuilders []resolverResultBuilder
 	isBatch        bool
 }
 
@@ -53,12 +59,12 @@ func (r resolver) buildResults(ctx context.Context, outs []reflect.Value) (inter
 	)
 
 	for i, res := range outs {
-		switch r.resultBuilders[i] {
-		case returnResult:
+		switch b := r.resultBuilders[i].(type) {
+		case returnedResultBuilder:
 			result = res.Interface()
-		case returnContext:
-			ctx = context.WithValue(ctx, res.Type(), res.Interface())
-		case returnError:
+		case *contextResultBuilder:
+			ctx = context.WithValue(ctx, b.info.baseType, res.Interface())
+		case errorResultBuilder:
 			if !res.IsNil() {
 				err = res.Interface().(error)
 			}
@@ -103,7 +109,7 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 	resolver := resolver{}
 
 	argumentBuilders := make([]resolverArgumentBuilder, resolveFnType.NumIn())
-	returnTypes := make([]int, resolveFnType.NumOut())
+	returnTypes := make([]resolverResultBuilder, resolveFnType.NumOut())
 
 	for i := 0; i < resolveFnType.NumIn(); i++ {
 		in := resolveFnType.In(i)
@@ -166,15 +172,15 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 	for i := 0; i < resolveFnType.NumOut(); i++ {
 		out := resolveFnType.Out(i)
 		var (
-			returnType int
+			returnType resolverResultBuilder
 			outInfo    *unwrappedInfo
 		)
-		if isContext, err := engine.asContextMerger(out); isContext {
-			returnType = returnContext
+		if isContext, info, err := engine.asContextMerger(out); isContext {
+			returnType = &contextResultBuilder{info: info}
 		} else if err != nil {
 			return nil, err
 		} else if engine.asErrorResult(out) {
-			returnType = returnError
+			returnType = errorResultBuilder(0)
 		} else {
 			if resolver.isBatch {
 				if out.Kind() != reflect.Slice {
@@ -203,7 +209,7 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 				return nil, fmt.Errorf("unsupported resolve result[%d] '%s'", i, out)
 			}
 
-			returnType = returnResult
+			returnType = returnedResultBuilder(0)
 		}
 
 		returnTypes[i] = returnType
