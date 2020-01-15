@@ -347,17 +347,17 @@ func makeDefault(p reflect.Type) reflect.Value {
 	case reflect.Array:
 		return dftNilValue
 	case reflect.Chan:
-		return dftNilValue
+		return reflect.MakeChan(p, 0)
 	case reflect.Func:
-		return dftNilValue
+		return reflect.MakeFunc(p, nil)
 	case reflect.Interface:
-		return dftNilValue
+		return dftNilValue // FIXME: fix default interface
 	case reflect.Map:
-		return dftNilValue
+		return reflect.MakeMap(p)
 	case reflect.Ptr:
-		return dftNilValue
+		return makeDefault(p.Elem()).Addr()
 	case reflect.Slice:
-		return dftNilValue
+		return reflect.MakeSlice(p, 0, 0)
 	case reflect.String:
 		return dftStringValue
 	case reflect.Struct:
