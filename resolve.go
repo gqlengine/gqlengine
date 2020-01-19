@@ -5,6 +5,9 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"runtime/debug"
+
+	"github.com/karfield/graphql/gqlerrors"
 
 	"github.com/karfield/graphql"
 )
@@ -226,13 +229,26 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 	resolver.resultBuilders = returnTypes
 	resolveFnValue := reflect.ValueOf(resolve)
 	resolver.fnPrototype = resolveFnValue
-	resolver.fn = func(p graphql.ResolveParams) (interface{}, context.Context, error) {
+	resolver.fn = func(p graphql.ResolveParams) (result interface{}, ctx context.Context, ferr error) {
+		ctx = p.Context
+		defer func() {
+			if r := recover(); r != nil {
+				debug.PrintStack()
+				if err, ok := r.(error); ok {
+					ferr = err
+				} else {
+					ferr = gqlerrors.InternalError(fmt.Sprintf("%v", r))
+				}
+			}
+		}()
 		args, err := resolver.buildArgs(p)
 		if err != nil {
-			return nil, p.Context, err
+			ferr = err
+			return
 		}
 		results := resolveFnValue.Call(args)
-		return resolver.buildResults(p.Context, results)
+		result, ctx, ferr = resolver.buildResults(p.Context, results)
+		return
 	}
 
 	return &resolver, nil
