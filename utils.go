@@ -4,6 +4,7 @@ package gqlengine
 import (
 	"fmt"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -483,4 +484,16 @@ func wrapType(field *reflect.StructField, t graphql.Type, isArray bool) graphql.
 		}
 	}
 	return t
+}
+
+func getFuncName(fn interface{}) string {
+	name := runtime.FuncForPC(reflect.ValueOf(fn).Pointer()).Name()
+	if dot := strings.LastIndex(name, "."); dot >= 0 {
+		return name[dot+1:]
+	}
+	return name
+}
+
+func getEntryFuncName(fn interface{}) string {
+	return strcase.ToLowerCamel(getFuncName(fn))
 }

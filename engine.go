@@ -120,8 +120,10 @@ type chainBuilder interface {
 }
 
 type QueryBuilder interface {
+	Name(name string) QueryBuilder
 	Description(desc string) QueryBuilder
 	Tags(tags ...string) QueryBuilder
+	WrapWith(fn interface{}) QueryBuilder
 }
 
 type _query struct {
@@ -133,26 +135,38 @@ type _query struct {
 
 func (q *_query) build(engine *Engine) error {
 	if q.tags == nil {
-		return engine.AddQuery(q.name, q.desc, q.resolve)
+		return engine.AddQuery(q.resolve, q.name, q.desc)
 	}
-	return engine.AddQuery(q.name, q.desc, q.resolve, q.tags...)
+	return engine.AddQuery(q.resolve, q.name, q.desc, q.tags...)
 }
 
+func (q *_query) Name(name string) QueryBuilder        { q.name = name; return q }
 func (q *_query) Description(desc string) QueryBuilder { q.desc = desc; return q }
 func (q *_query) Tags(tags ...string) QueryBuilder     { q.tags = tags; return q }
+func (q *_query) WrapWith(fn interface{}) QueryBuilder {
+	newResolveFn, err := BeforeResolve(q.resolve, fn)
+	if err != nil {
+		panic(err)
+	}
+	q.resolve = newResolveFn
+	return q
+}
 
-func (engine *Engine) NewQuery(name string, resolve interface{}) QueryBuilder {
-	q := &_query{name: name, resolve: resolve}
+func (engine *Engine) NewQuery(resolve interface{}) QueryBuilder {
+	q := &_query{resolve: resolve, name: getEntryFuncName(resolve)}
 	engine.chainBuilders = append(engine.chainBuilders, q)
 	return q
 }
 
-func (engine *Engine) AddQuery(name string, description string, resolve interface{}, tags ...string) error {
-	if name == "" {
-		return fmt.Errorf("requires an operation name")
-	}
+func (engine *Engine) AddQuery(resolve interface{}, name string, description string, tags ...string) error {
 	if resolve == nil {
 		return fmt.Errorf("missing resolve funtion")
+	}
+	if name == "" {
+		name = getEntryFuncName(resolve)
+		if name == "" {
+			return fmt.Errorf("requires a query field name")
+		}
 	}
 	if engine.query == nil {
 		engine.query = graphql.NewObject(graphql.ObjectConfig{
@@ -186,8 +200,10 @@ func (engine *Engine) AddQuery(name string, description string, resolve interfac
 }
 
 type MutationBuilder interface {
+	Name(name string) MutationBuilder
 	Description(desc string) MutationBuilder
 	Tags(tags ...string) MutationBuilder
+	WrapWith(fn interface{}) MutationBuilder
 }
 
 type _mutation struct {
@@ -199,24 +215,38 @@ type _mutation struct {
 
 func (m *_mutation) build(engine *Engine) error {
 	if m.tags == nil {
-		return engine.AddMutation(m.name, m.desc, m.resolve)
+		return engine.AddMutation(m.resolve, m.name, m.desc)
 	}
-	return engine.AddMutation(m.name, m.desc, m.resolve, m.tags...)
+	return engine.AddMutation(m.resolve, m.name, m.desc, m.tags...)
 }
+
+func (m *_mutation) Name(name string) MutationBuilder        { m.name = name; return m }
 func (m *_mutation) Description(desc string) MutationBuilder { m.desc = desc; return m }
 func (m *_mutation) Tags(tags ...string) MutationBuilder     { m.tags = tags; return m }
-func (engine *Engine) NewMutation(name string, resolve interface{}) MutationBuilder {
-	m := &_mutation{name: name, resolve: resolve}
+func (m *_mutation) WrapWith(fn interface{}) MutationBuilder {
+	newResolveFn, err := BeforeResolve(m.resolve, fn)
+	if err != nil {
+		panic(err)
+	}
+	m.resolve = newResolveFn
+	return m
+}
+
+func (engine *Engine) NewMutation(resolve interface{}) MutationBuilder {
+	m := &_mutation{resolve: resolve, name: getEntryFuncName(resolve)}
 	engine.chainBuilders = append(engine.chainBuilders, m)
 	return m
 }
 
-func (engine *Engine) AddMutation(name string, description string, resolve interface{}, tags ...string) error {
-	if name == "" {
-		return fmt.Errorf("requires an operation name")
-	}
+func (engine *Engine) AddMutation(resolve interface{}, name string, description string, tags ...string) error {
 	if resolve == nil {
 		return fmt.Errorf("missing resolve funtion")
+	}
+	if name == "" {
+		name = getEntryFuncName(resolve)
+		if name == "" {
+			return fmt.Errorf("requires a mutation field name")
+		}
 	}
 	if engine.mutation == nil {
 		engine.mutation = graphql.NewObject(graphql.ObjectConfig{
@@ -274,9 +304,11 @@ func (engine *Engine) AddResolver(field string, resolve interface{}) error {
 }
 
 type PaginationQuery interface {
+	Name(name string) PaginationQuery
 	Description(desc string) PaginationQuery
 	Tags(tags ...string) PaginationQuery
 	TotalResolver(resolve interface{}) PaginationQuery
+	WrapWith(fn interface{}) PaginationQuery
 }
 
 type _paginationQuery struct {
@@ -289,29 +321,43 @@ type _paginationQuery struct {
 
 func (p *_paginationQuery) build(engine *Engine) error {
 	if p.tags == nil {
-		return engine.AddPaginationQuery(p.name, p.description, p.resolveList, p.resolveTotal)
+		return engine.AddPaginationQuery(p.resolveList, p.resolveTotal, p.name, p.description)
 	}
-	return engine.AddPaginationQuery(p.name, p.description, p.resolveList, p.resolveTotal, p.tags...)
+	return engine.AddPaginationQuery(p.resolveList, p.resolveTotal, p.name, p.description, p.tags...)
 }
+
+func (p *_paginationQuery) Name(name string) PaginationQuery        { p.name = name; return p }
 func (p *_paginationQuery) Description(desc string) PaginationQuery { p.description = desc; return p }
 func (p *_paginationQuery) Tags(tags ...string) PaginationQuery     { p.tags = tags; return p }
 func (p *_paginationQuery) TotalResolver(resolve interface{}) PaginationQuery {
 	p.resolveTotal = resolve
 	return p
 }
+func (p *_paginationQuery) WrapWith(fn interface{}) PaginationQuery {
+	newResolveList, err := BeforeResolve(p.resolveList, fn)
+	if err != nil {
+		panic(err)
+	}
+	p.resolveList = newResolveList
+	// fixme: wrap 'resolve total' too?
+	return p
+}
 
-func (engine *Engine) NewPaginationQuery(name string, resolve interface{}) PaginationQuery {
-	p := &_paginationQuery{name: name, resolveList: resolve}
+func (engine *Engine) NewPaginationQuery(resolve interface{}) PaginationQuery {
+	p := &_paginationQuery{resolveList: resolve, name: getEntryFuncName(resolve)}
 	engine.chainBuilders = append(engine.chainBuilders, p)
 	return p
 }
 
-func (engine *Engine) AddPaginationQuery(name, description string, resolveList, resolveTotal interface{}, tags ...string) error {
-	if name == "" {
-		return fmt.Errorf("requires an operation name")
-	}
+func (engine *Engine) AddPaginationQuery(resolveList, resolveTotal interface{}, name, description string, tags ...string) error {
 	if resolveList == nil {
 		return fmt.Errorf("missing resolveList() funtion")
+	}
+	if name == "" {
+		name = getEntryFuncName(resolveList)
+		if name == "" {
+			return fmt.Errorf("requires a query field name")
+		}
 	}
 	listResolver, err := engine.analysisResolver("", resolveList)
 	if err != nil {
@@ -385,9 +431,11 @@ func (engine *Engine) AddPaginationQuery(name, description string, resolveList, 
 }
 
 type SubscriptionBuilder interface {
+	Name(name string) SubscriptionBuilder
 	Description(desc string) SubscriptionBuilder
 	OnUnsubscribed(unsubscribed interface{}) SubscriptionBuilder
 	Tags(tags ...string) SubscriptionBuilder
+	WrapWith(fn interface{}) SubscriptionBuilder
 }
 
 type _subscriptionBuilder struct {
@@ -400,30 +448,42 @@ type _subscriptionBuilder struct {
 
 func (s *_subscriptionBuilder) build(engine *Engine) error {
 	if s.tags == nil {
-		return engine.AddSubscription(s.name, s.desc, s.onSubscribed, s.onUnsubscribed)
+		return engine.AddSubscription(s.onSubscribed, s.onUnsubscribed, s.name, s.desc)
 	}
-	return engine.AddSubscription(s.name, s.desc, s.onSubscribed, s.onUnsubscribed, s.tags...)
+	return engine.AddSubscription(s.onSubscribed, s.onUnsubscribed, s.name, s.desc, s.tags...)
 }
 
+func (s *_subscriptionBuilder) Name(name string) SubscriptionBuilder        { s.name = name; return s }
 func (s *_subscriptionBuilder) Description(desc string) SubscriptionBuilder { s.desc = desc; return s }
 func (s *_subscriptionBuilder) Tags(tags ...string) SubscriptionBuilder     { s.tags = tags; return s }
 func (s *_subscriptionBuilder) OnUnsubscribed(unsubscribed interface{}) SubscriptionBuilder {
 	s.onUnsubscribed = unsubscribed
 	return s
 }
+func (s *_subscriptionBuilder) WrapWith(fn interface{}) SubscriptionBuilder {
+	newInitPrototypeFn, err := BeforeResolve(s.onSubscribed, fn)
+	if err != nil {
+		panic(err)
+	}
+	s.onSubscribed = newInitPrototypeFn
+	return s
+}
 
-func (engine *Engine) NewSubscription(name string, onSubscribed interface{}) SubscriptionBuilder {
-	s := &_subscriptionBuilder{name: name, onSubscribed: onSubscribed}
+func (engine *Engine) NewSubscription(onSubscribed interface{}) SubscriptionBuilder {
+	s := &_subscriptionBuilder{name: getEntryFuncName(onSubscribed), onSubscribed: onSubscribed}
 	engine.chainBuilders = append(engine.chainBuilders, s)
 	return s
 }
 
-func (engine *Engine) AddSubscription(name string, description string, onSubscribed, onUnsubscribed interface{}, tags ...string) error {
-	if name == "" {
-		return fmt.Errorf("requires an operation name")
-	}
+func (engine *Engine) AddSubscription(onSubscribed, onUnsubscribed interface{}, name string, description string, tags ...string) error {
 	if onSubscribed == nil {
 		return fmt.Errorf("missing onSubscribed() funtion")
+	}
+	if name == "" {
+		name = getEntryFuncName(onSubscribed)
+		if name == "" {
+			return fmt.Errorf("requires a subscription field name")
+		}
 	}
 	if engine.subscription == nil {
 		engine.subscription = graphql.NewObject(graphql.ObjectConfig{
