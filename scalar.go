@@ -9,14 +9,14 @@ import (
 )
 
 type Scalar interface {
-	GraphQLScalarSerialize(value interface{}) interface{}
-	GraphQLScalarParseValue(value interface{}) interface{}
+	GraphQLScalarSerialize() interface{}
+	GraphQLScalarParseValue(value interface{})
 	GraphQLScalarDescription() string
 }
 
 type ScalarWithASTParsing interface {
 	Scalar
-	GraphQLScalarParseLiteral(valueAST ast.Value) interface{}
+	GraphQLScalarParseLiteral(valueAST ast.Value)
 }
 
 type NameAlterableScalar interface {
@@ -39,19 +39,34 @@ func (engine *Engine) collectCustomScalar(info *unwrappedInfo) graphql.Type {
 	}
 
 	var literalParsing graphql.ParseLiteralFn
-	if astParsing, ok := scalar.(ScalarWithASTParsing); ok {
-		literalParsing = astParsing.GraphQLScalarParseLiteral
+	if _, ok := scalar.(ScalarWithASTParsing); ok {
+		literalParsing = func(valueAST ast.Value) interface{} {
+			s := newPrototype(info.baseType).(ScalarWithASTParsing)
+			s.GraphQLScalarParseLiteral(valueAST)
+			return s
+		}
 	} else {
 		literalParsing = func(valueAST ast.Value) interface{} {
-			return scalar.GraphQLScalarParseValue(valueAST.GetValue())
+			s := newPrototype(info.baseType).(Scalar)
+			s.GraphQLScalarParseValue(valueAST.GetValue())
+			return s
 		}
 	}
 
 	d := graphql.NewScalar(graphql.ScalarConfig{
-		Name:         name,
-		Description:  scalar.GraphQLScalarDescription(),
-		Serialize:    scalar.GraphQLScalarSerialize,
-		ParseValue:   scalar.GraphQLScalarParseValue,
+		Name:        name,
+		Description: scalar.GraphQLScalarDescription(),
+		Serialize: func(value interface{}) interface{} {
+			if s, ok := value.(Scalar); ok {
+				return s.GraphQLScalarSerialize()
+			}
+			return nil
+		},
+		ParseValue: func(value interface{}) interface{} {
+			s := newPrototype(info.baseType).(Scalar)
+			s.GraphQLScalarParseValue(value)
+			return s
+		},
 		ParseLiteral: literalParsing,
 	})
 	engine.types[info.baseType] = d
