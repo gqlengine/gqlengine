@@ -44,7 +44,7 @@ func (engine *Engine) collectCustomScalar(info *unwrappedInfo) graphql.Type {
 		return s
 	}
 
-	scalar := newPrototype(info.baseType).(Scalar)
+	scalar := newPrototype(info.implType).(Scalar)
 
 	name := info.baseType.Name()
 	if v, ok := scalar.(NameAlterableScalar); ok {
@@ -54,13 +54,13 @@ func (engine *Engine) collectCustomScalar(info *unwrappedInfo) graphql.Type {
 	var literalParsing graphql.ParseLiteralFn
 	if _, ok := scalar.(ScalarWithASTParsing); ok {
 		literalParsing = func(valueAST ast.Value) interface{} {
-			s := newPrototype(info.baseType).(ScalarWithASTParsing)
+			s := newPrototype(info.implType).(ScalarWithASTParsing)
 			s.GraphQLScalarParseLiteral(valueAST)
 			return s
 		}
 	} else {
 		literalParsing = func(valueAST ast.Value) interface{} {
-			s := newPrototype(info.baseType).(Scalar)
+			s := newPrototype(info.implType).(Scalar)
 			s.GraphQLScalarParseValue(valueAST.GetValue())
 			return s
 		}
