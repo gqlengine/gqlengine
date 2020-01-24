@@ -76,7 +76,7 @@ func (engine *Engine) collectCustomScalar(info *unwrappedInfo) graphql.Type {
 			return nil
 		},
 		ParseValue: func(value interface{}) interface{} {
-			s := newPrototype(info.baseType).(Scalar)
+			s := newPrototype(info.implType).(Scalar)
 			s.GraphQLScalarParseValue(value)
 			return s
 		},
