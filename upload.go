@@ -53,7 +53,8 @@ func asUploadScalar(field *reflect.StructField) (graphql.Type, *unwrappedInfo, e
 	if err != nil {
 		return nil, nil, err
 	}
-	if unwrapped.baseType == _uploadType {
+	if unwrapped.ptrType == _uploadType {
+		unwrapped.baseType = _uploadType
 		unwrapped.implType = _uploadType
 		return wrapType(field, UploadScalar, unwrapped.array), &unwrapped, nil
 	} else {
