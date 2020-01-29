@@ -17,6 +17,7 @@ package gqlengine
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	"github.com/gobwas/ws"
 
@@ -51,9 +52,15 @@ func (engine *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if len(opts) > 1 {
 		results := make([]*graphql.Result, len(opts))
+		wg := sync.WaitGroup{}
+		wg.Add(len(opts))
 		for i, opt := range opts {
-			results[i] = engine.doGraphqlRequest(w, r, opt)
+			go func(i int, opt *RequestOptions) {
+				results[i] = engine.doGraphqlRequest(w, r, opt)
+				wg.Done()
+			}(i, opt)
 		}
+		wg.Wait()
 		if err := json.NewEncoder(w).Encode(results); err != nil {
 		}
 	} else {
