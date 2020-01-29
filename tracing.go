@@ -56,6 +56,10 @@ type tracingContextKey struct{}
 type tracingExtension struct{}
 
 func (t *tracingExtension) Init(ctx context.Context, params *graphql.Params) context.Context {
+	if params.OperationName == "IntrospectionQuery" {
+		// ignore introspection query
+		return ctx
+	}
 	return context.WithValue(ctx, tracingContextKey{}, &Tracing{
 		Version:   1,
 		StartTime: time.Now(),
@@ -67,7 +71,11 @@ func (t *tracingExtension) Name() string {
 }
 
 func (t *tracingExtension) ParseDidStart(ctx context.Context) (context.Context, graphql.ParseFinishFunc) {
-	tracing := ctx.Value(tracingContextKey{}).(*Tracing)
+	tr := ctx.Value(tracingContextKey{})
+	if tr == nil {
+		return ctx, nil
+	}
+	tracing := tr.(*Tracing)
 	startTs := time.Now()
 	tracing.Parsing.StartOffset = startTs.Sub(tracing.StartTime).Milliseconds()
 	return ctx, func(err error) {
@@ -76,7 +84,11 @@ func (t *tracingExtension) ParseDidStart(ctx context.Context) (context.Context, 
 }
 
 func (t *tracingExtension) ValidationDidStart(ctx context.Context) (context.Context, graphql.ValidationFinishFunc) {
-	tracing := ctx.Value(tracingContextKey{}).(*Tracing)
+	tr := ctx.Value(tracingContextKey{})
+	if tr == nil {
+		return ctx, nil
+	}
+	tracing := tr.(*Tracing)
 	startTs := time.Now()
 	tracing.Validation.StartOffset = startTs.Sub(tracing.StartTime).Milliseconds()
 	return ctx, func(errors []gqlerrors.FormattedError) {
@@ -85,7 +97,11 @@ func (t *tracingExtension) ValidationDidStart(ctx context.Context) (context.Cont
 }
 
 func (t *tracingExtension) ExecutionDidStart(ctx context.Context) (context.Context, graphql.ExecutionFinishFunc) {
-	tracing := ctx.Value(tracingContextKey{}).(*Tracing)
+	tr := ctx.Value(tracingContextKey{})
+	if tr == nil {
+		return ctx, nil
+	}
+	tracing := tr.(*Tracing)
 	startTs := time.Now()
 	tracing.Execution.StartOffset = startTs.Sub(tracing.StartTime).Milliseconds()
 	return ctx, func(result *graphql.Result) {
@@ -95,7 +111,11 @@ func (t *tracingExtension) ExecutionDidStart(ctx context.Context) (context.Conte
 }
 
 func (t *tracingExtension) ResolveFieldDidStart(ctx context.Context, info *graphql.ResolveInfo) (context.Context, graphql.ResolveFieldFinishFunc) {
-	tracing := ctx.Value(tracingContextKey{}).(*Tracing)
+	tr := ctx.Value(tracingContextKey{})
+	if tr == nil {
+		return ctx, nil
+	}
+	tracing := tr.(*Tracing)
 	startTs := time.Now()
 	record := &TracingResolveRecord{
 		TracingRecord: TracingRecord{
