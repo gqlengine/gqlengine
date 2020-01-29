@@ -131,10 +131,12 @@ func getFromMultipart(form *multipart.Form) []*RequestOptions {
 	}
 
 	variables := map[string][]string{}
-	if _map, ok := form.Value["map"]; !ok {
+	if _map, ok := form.Value["map"]; ok {
 		if err := json.Unmarshal([]byte(_map[0]), &variables); err != nil {
 			return nil
 		}
+	} else {
+		return nil
 	}
 
 	fixVariables := func(opts *RequestOptions, prefix string) error {
