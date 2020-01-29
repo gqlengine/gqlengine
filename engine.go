@@ -22,6 +22,10 @@ import (
 	"github.com/karfield/graphql"
 )
 
+const (
+	DefaultMultipartParsingBufferSize = 10 * 1024 * 1024
+)
+
 type Engine struct {
 	initialized    bool
 	opts           Options
@@ -47,12 +51,16 @@ type Engine struct {
 }
 
 type Options struct {
-	Tracing       bool
-	WsSubProtocol string
-	Tags          bool
+	Tracing                    bool
+	WsSubProtocol              string
+	Tags                       bool
+	MultipartParsingBufferSize int64
 }
 
 func NewEngine(options Options) *Engine {
+	if options.MultipartParsingBufferSize == 0 {
+		options.MultipartParsingBufferSize = DefaultMultipartParsingBufferSize
+	}
 	engine := &Engine{
 		opts:           options,
 		types:          map[reflect.Type]graphql.Type{},
@@ -77,6 +85,7 @@ func NewEngine(options Options) *Engine {
 		engine.asEnumField,
 		engine.asCustomScalarField,
 		engine.asInputField,
+		asUploadScalar,
 	}
 	engine.objFieldCheckers = []fieldChecker{
 		asBuiltinScalar,

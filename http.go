@@ -53,6 +53,7 @@ const (
 	ContentTypeJSON           = "application/json"
 	ContentTypeGraphQL        = "application/graphql"
 	ContentTypeFormURLEncoded = "application/x-www-form-urlencoded"
+	ContextTypeMultipart      = "multipart/form-data"
 )
 
 type RequestOptions struct {
@@ -87,9 +88,9 @@ func getFromForm(values url.Values) *RequestOptions {
 }
 
 // RequestOptions Parses a http.Request into GraphQL request options struct
-func newRequestOptions(r *http.Request) *RequestOptions {
+func (engine *Engine) newRequestOptions(r *http.Request) []*RequestOptions {
 	if reqOpt := getFromForm(r.URL.Query()); reqOpt != nil {
-		return reqOpt
+		return []*RequestOptions{reqOpt}
 	}
 
 	if r.Method != http.MethodPost {
@@ -109,18 +110,28 @@ func newRequestOptions(r *http.Request) *RequestOptions {
 	case ContentTypeGraphQL:
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			return &RequestOptions{}
+			return nil
 		}
-		return &RequestOptions{
-			Query: string(body),
-		}
+		return []*RequestOptions{{Query: string(body)}}
+
 	case ContentTypeFormURLEncoded:
 		if err := r.ParseForm(); err != nil {
-			return &RequestOptions{}
+			return nil
 		}
 
 		if reqOpt := getFromForm(r.PostForm); reqOpt != nil {
-			return reqOpt
+			return []*RequestOptions{reqOpt}
+		}
+
+		return nil
+
+	case ContextTypeMultipart:
+		if err := r.ParseMultipartForm(engine.opts.MultipartParsingBufferSize); err != nil {
+			return nil
+		}
+
+		if reqOpts := getFromMultipart(r.MultipartForm); reqOpts != nil {
+			return reqOpts
 		}
 
 		return nil
@@ -131,7 +142,7 @@ func newRequestOptions(r *http.Request) *RequestOptions {
 		var opts RequestOptions
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			return &opts
+			return nil
 		}
 		err = json.Unmarshal(body, &opts)
 		if err != nil {
@@ -141,6 +152,6 @@ func newRequestOptions(r *http.Request) *RequestOptions {
 			_ = json.Unmarshal(body, &optsCompatible)
 			_ = json.Unmarshal([]byte(optsCompatible.Variables), &opts.Variables)
 		}
-		return &opts
+		return []*RequestOptions{&opts}
 	}
 }

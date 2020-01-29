@@ -23,27 +23,38 @@ import (
 	"github.com/karfield/graphql"
 )
 
+func (engine *Engine) doGraphqlRequest(w http.ResponseWriter, r *http.Request, opt *RequestOptions) *graphql.Result {
+	ctx, err := engine.handleRequestContexts(r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return nil
+	}
+	result, ctx := graphql.Do(graphql.Params{
+		Schema:         engine.schema,
+		Context:        ctx,
+		RequestString:  opt.Query,
+		VariableValues: opt.Variables,
+		OperationName:  opt.OperationName,
+	})
+	if err := engine.finalizeContexts(ctx, w); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	return result
+}
+
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fixCors(w, r)
-	opts := newRequestOptions(r)
-	if opts != nil {
-		ctx, err := engine.handleRequestContexts(r)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		result, ctx := graphql.Do(graphql.Params{
-			Schema:         engine.schema,
-			Context:        ctx,
-			RequestString:  opts.Query,
-			VariableValues: opts.Variables,
-			OperationName:  opts.OperationName,
-		})
-		if err := engine.finalizeContexts(ctx, w); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+	opts := engine.newRequestOptions(r)
+	if len(opts) == 1 {
+		result := engine.doGraphqlRequest(w, r, opts[0])
 		if err := json.NewEncoder(w).Encode(result); err != nil {
-			// FIXME: do with response failure
+		}
+	} else if len(opts) > 1 {
+		results := make([]*graphql.Result, len(opts))
+		for i, opt := range opts {
+			results[i] = engine.doGraphqlRequest(w, r, opt)
+		}
+		if err := json.NewEncoder(w).Encode(results); err != nil {
 		}
 	} else {
 		w.WriteHeader(http.StatusOK)
