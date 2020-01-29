@@ -73,7 +73,7 @@ func (t *tracingExtension) Name() string {
 func (t *tracingExtension) ParseDidStart(ctx context.Context) (context.Context, graphql.ParseFinishFunc) {
 	tr := ctx.Value(tracingContextKey{})
 	if tr == nil {
-		return ctx, nil
+		return ctx, func(err error) {}
 	}
 	tracing := tr.(*Tracing)
 	startTs := time.Now()
@@ -86,7 +86,7 @@ func (t *tracingExtension) ParseDidStart(ctx context.Context) (context.Context, 
 func (t *tracingExtension) ValidationDidStart(ctx context.Context) (context.Context, graphql.ValidationFinishFunc) {
 	tr := ctx.Value(tracingContextKey{})
 	if tr == nil {
-		return ctx, nil
+		return ctx, func(errors []gqlerrors.FormattedError) {}
 	}
 	tracing := tr.(*Tracing)
 	startTs := time.Now()
@@ -99,7 +99,7 @@ func (t *tracingExtension) ValidationDidStart(ctx context.Context) (context.Cont
 func (t *tracingExtension) ExecutionDidStart(ctx context.Context) (context.Context, graphql.ExecutionFinishFunc) {
 	tr := ctx.Value(tracingContextKey{})
 	if tr == nil {
-		return ctx, nil
+		return ctx, func(result *graphql.Result) {}
 	}
 	tracing := tr.(*Tracing)
 	startTs := time.Now()
@@ -113,7 +113,7 @@ func (t *tracingExtension) ExecutionDidStart(ctx context.Context) (context.Conte
 func (t *tracingExtension) ResolveFieldDidStart(ctx context.Context, info *graphql.ResolveInfo) (context.Context, graphql.ResolveFieldFinishFunc) {
 	tr := ctx.Value(tracingContextKey{})
 	if tr == nil {
-		return ctx, nil
+		return ctx, func(i interface{}, err error) {}
 	}
 	tracing := tr.(*Tracing)
 	startTs := time.Now()
