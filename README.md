@@ -48,7 +48,7 @@ api.go
 package main
 
 type MyInfo struct {
-  saySomthing string
+  saySomething string
 }
 
 func (info *MyInfo) GraphQLObjectDescription() string { return "an info object" }
