@@ -4,9 +4,7 @@
 
 ## Getting started
 
-Firstly, get a token from [teamirror.com](https://teamirror.com), then setup the settings following instructions by [go.teamirror.com](https://go.teamirror.com)
-
-Now you can get the module:
+Get the module:
 
 ```
 go get -u github.com/gqlengine/gqlengine
