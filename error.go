@@ -1,4 +1,4 @@
-// Copyright 2020 Karfield Technology. Ltd (凯斐德科技（杭州）有限公司)
+// Copyright 2020 凯斐德科技（杭州）有限公司 (Karfield Technology, ltd.)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
