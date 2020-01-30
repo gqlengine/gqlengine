@@ -1,8 +1,8 @@
-#*GQLEngine* is most productive solution for making a graphql server
+# *GQLEngine* is most productive solution for making a graphql server
 
 
 
-##Getting started
+## Getting started
 
 Firstly, get a token from [teamirror.com](https://teamirror.com), then setup the settings following instructions by [go.teamirror.com](https://go.teamirror.com)
 
@@ -107,7 +107,7 @@ open browser, you can get the [playground](http://localhost:9996/api/graphql/pla
 
 
 
-##Features
+## Features
 
 - Basic features
   - [x] Object type reflection
