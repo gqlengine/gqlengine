@@ -62,7 +62,10 @@ func (engine *Engine) makePaginationQueryResultObject(baseType reflect.Type) gra
 		baseName = baseType.Elem().Name()
 	}
 
-	return graphql.NewObject(graphql.ObjectConfig{
+	if t, ok := engine.paginationResults[baseType]; ok {
+		return t
+	}
+	t := graphql.NewObject(graphql.ObjectConfig{
 		Name:        baseName + "PaginationResults",
 		Description: "pagination results of " + baseName,
 		Fields: graphql.Fields{
@@ -80,4 +83,6 @@ func (engine *Engine) makePaginationQueryResultObject(baseType reflect.Type) gra
 			},
 		},
 	})
+	engine.paginationResults[baseType] = t
+	return t
 }

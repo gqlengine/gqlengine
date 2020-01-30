@@ -27,19 +27,20 @@ const (
 )
 
 type Engine struct {
-	initialized    bool
-	opts           Options
-	schema         graphql.Schema
-	query          *graphql.Object
-	mutation       *graphql.Object
-	subscription   *graphql.Object
-	types          map[reflect.Type]graphql.Type
-	idTypes        map[reflect.Type]struct{}
-	argConfigs     map[reflect.Type]graphql.FieldConfigArgument
-	reqCtx         map[reflect.Type]reflect.Type
-	respCtx        map[reflect.Type]reflect.Type
-	objResolvers   map[reflect.Type]objectResolvers
-	batchResolvers map[reflect.Type]objectResolvers
+	initialized       bool
+	opts              Options
+	schema            graphql.Schema
+	query             *graphql.Object
+	mutation          *graphql.Object
+	subscription      *graphql.Object
+	types             map[reflect.Type]graphql.Type
+	idTypes           map[reflect.Type]struct{}
+	argConfigs        map[reflect.Type]graphql.FieldConfigArgument
+	reqCtx            map[reflect.Type]reflect.Type
+	respCtx           map[reflect.Type]reflect.Type
+	paginationResults map[reflect.Type]*graphql.Object
+	objResolvers      map[reflect.Type]objectResolvers
+	batchResolvers    map[reflect.Type]objectResolvers
 
 	resultCheckers        []resolveResultChecker
 	inputFieldCheckers    []fieldChecker
@@ -62,15 +63,16 @@ func NewEngine(options Options) *Engine {
 		options.MultipartParsingBufferSize = DefaultMultipartParsingBufferSize
 	}
 	engine := &Engine{
-		opts:           options,
-		types:          map[reflect.Type]graphql.Type{},
-		idTypes:        map[reflect.Type]struct{}{},
-		argConfigs:     map[reflect.Type]graphql.FieldConfigArgument{},
-		reqCtx:         map[reflect.Type]reflect.Type{},
-		respCtx:        map[reflect.Type]reflect.Type{},
-		objResolvers:   map[reflect.Type]objectResolvers{},
-		batchResolvers: map[reflect.Type]objectResolvers{},
-		tags:           map[string]*tagEntries{},
+		opts:              options,
+		types:             map[reflect.Type]graphql.Type{},
+		idTypes:           map[reflect.Type]struct{}{},
+		argConfigs:        map[reflect.Type]graphql.FieldConfigArgument{},
+		reqCtx:            map[reflect.Type]reflect.Type{},
+		respCtx:           map[reflect.Type]reflect.Type{},
+		paginationResults: map[reflect.Type]*graphql.Object{},
+		objResolvers:      map[reflect.Type]objectResolvers{},
+		batchResolvers:    map[reflect.Type]objectResolvers{},
+		tags:              map[string]*tagEntries{},
 	}
 	engine.resultCheckers = []resolveResultChecker{
 		asBuiltinScalarResult,
