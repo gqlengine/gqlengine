@@ -1,8 +1,8 @@
-#*GQLEngine* is most productive solution for making a graphql server
+# *GQLEngine* is most productive solution for making a graphql server
 
 
 
-##Getting started
+## Getting started
 
 Firstly, get a token from [teamirror.com](https://teamirror.com), then setup the settings following instructions by [go.teamirror.com](https://go.teamirror.com)
 
@@ -74,7 +74,7 @@ update the code
 
 import (
   "github.com/gorilla/mux"
-	"github.com/gqlengine/playground"
+  "github.com/gqlengine/playground"
 )
 
 ...
@@ -83,20 +83,20 @@ func main() {
   
   ... // init your gql engine
   
-	playground.SetEndpoints("/api/graphql", "/api/graphql/subscriptions")
+  playground.SetEndpoints("/api/graphql", "/api/graphql/subscriptions")
   
   // recommends to use 'gorilla/mux' to serve the playground web assets
   r := mux.NewRouter()
-	r.HandleFunc("/api/graphql", engine.ServeHTTP)
-	r.HandleFunc("/api/graphql/subscriptions", engine.ServeWebsocket)
-	r.PathPrefix("/api/graphql/playground").
-  	Handler(http.StripPrefix("/api/graphql/playground",
+  r.HandleFunc("/api/graphql", engine.ServeHTTP)
+  r.HandleFunc("/api/graphql/subscriptions", engine.ServeWebsocket)
+  r.PathPrefix("/api/graphql/playground").
+    Handler(http.StripPrefix("/api/graphql/playground",
       http.FileServer(playground.WebBundle)))
 
-	println("open playground http://localhost:9996/api/graphql/playground/")
-	if err := http.ListenAndServe(":9996", r); err != nil {
-		panic(err)
-	}
+  println("open playground http://localhost:9996/api/graphql/playground/")
+  if err := http.ListenAndServe(":9996", r); err != nil {
+    panic(err)
+  }
 }
 
 ```
@@ -107,7 +107,7 @@ open browser, you can get the [playground](http://localhost:9996/api/graphql/pla
 
 
 
-##Features
+## Features
 
 - Basic features
   - [x] Object type reflection
