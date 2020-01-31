@@ -41,6 +41,25 @@ func (p Pagination) GraphQLInputDescription() string {
 	return "pagination parameters"
 }
 
+func (p Pagination) Offset() int {
+	page := p.Page
+	if page <= 0 {
+		page = 1
+	}
+	sz := p.Size
+	if sz <= 0 {
+		sz = 10
+	}
+	return (page - 1) * sz
+}
+
+func (p Pagination) Limit() int {
+	if p.Size > 0 {
+		return p.Size
+	}
+	return 10
+}
+
 func getPaginationFromParams(p graphql.ResolveParams) Pagination {
 	pagination := Pagination{
 		Page: 1,
