@@ -58,38 +58,64 @@ func (a argumentsBuilder) build(params graphql.ResolveParams) (reflect.Value, er
 
 type fieldChecker func(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error)
 
-func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) (graphql.FieldConfigArgument, error) {
-	if _, ok := engine.argConfigs[baseType]; ok {
-		return nil, nil
-	}
+type argsLazyConfig struct {
+	args graphql.FieldConfigArgument
+}
 
-	defs := graphql.FieldConfigArgument{}
+func (engine *Engine) unwrapArgsFields(baseType reflect.Type, config *argsLazyConfig) error {
 	for i := 0; i < baseType.NumField(); i++ {
 		f := baseType.Field(i)
+		if f.Anonymous {
+			// embedded
+			embeddedInfo, err := unwrap(f.Type)
+			if err != nil {
+				return fmt.Errorf("check argument '%s' failure: %E", baseType.String(), err)
+			}
+			if embeddedInfo.array {
+				return fmt.Errorf("embedded arguments type should be struct, not slice")
+			}
+			err = engine.unwrapArgsFields(embeddedInfo.baseType, config)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 
 		gType, _, err := checkField(&f, engine.inputFieldCheckers, "argument")
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if gType == nil {
-			return nil, fmt.Errorf("unsupported type '%s' for argument[%d] '%s'", baseType.Name(), i, f.Name)
+			return fmt.Errorf("unsupported type '%s' for argument[%d] '%s'", baseType.Name(), i, f.Name)
 		}
 
 		name := fieldName(&f)
 		value, err := defaultValue(&f)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		defs[name] = &graphql.ArgumentConfig{
+		config.args[name] = &graphql.ArgumentConfig{
 			Type:         gType,
 			DefaultValue: value,
 			Description:  desc(&f),
 		}
 	}
+	return nil
+}
 
-	engine.argConfigs[baseType] = defs
-	return defs, nil
+func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) (graphql.FieldConfigArgument, error) {
+	if _, ok := engine.argConfigs[baseType]; ok {
+		return nil, nil
+	}
+	config := argsLazyConfig{
+		args: graphql.FieldConfigArgument{},
+	}
+	if err := engine.unwrapArgsFields(baseType, &config); err != nil {
+		return nil, err
+	}
+	engine.argConfigs[baseType] = config.args
+	return config.args, nil
 }
 
 func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, *unwrappedInfo, error) {
