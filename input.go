@@ -37,6 +37,48 @@ type CustomParserInput interface {
 
 var _inputType = reflect.TypeOf((*Input)(nil)).Elem()
 
+type inputLazyConfig struct {
+	fields graphql.InputObjectConfigFieldMap
+}
+
+func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazyConfig) error {
+	for i := 0; i < baseType.NumField(); i++ {
+		f := baseType.Field(i)
+		if f.Anonymous {
+			embeddedInfo, err := unwrap(f.Type)
+			if err != nil {
+				return fmt.Errorf("check input field '%s' failure: %E", baseType.String(), err)
+			}
+			if embeddedInfo.array {
+				return fmt.Errorf("embedded input field type should be struct, not slice")
+			}
+			if err := engine.unwrapInputFields(embeddedInfo.baseType, config); err != nil {
+				return err
+			}
+			continue
+		}
+
+		fieldType, _, err := checkField(&f, engine.inputFieldCheckers, "input field")
+		if err != nil {
+			return err
+		}
+		if fieldType == nil {
+			return fmt.Errorf("unsupported field type for input: %s", f.Type.String())
+		}
+		name := fieldName(&f)
+		value, err := defaultValue(&f)
+		if err != nil {
+			panic(err)
+		}
+		config.fields[name] = &graphql.InputObjectFieldConfig{
+			Description:  desc(&f),
+			Type:         fieldType,
+			DefaultValue: value,
+		}
+	}
+	return nil
+}
+
 func (engine *Engine) collectInput(info *unwrappedInfo) (graphql.Type, error) {
 	if input, ok := engine.types[info.baseType]; ok {
 		if input != nil {
@@ -44,27 +86,10 @@ func (engine *Engine) collectInput(info *unwrappedInfo) (graphql.Type, error) {
 		}
 		return nil, fmt.Errorf("loop-referred input object %s", info.baseType.String())
 	}
-	fields := graphql.InputObjectConfigFieldMap{}
-	for i := 0; i < info.baseType.NumField(); i++ {
-		f := info.baseType.Field(i)
 
-		fieldType, _, err := checkField(&f, engine.inputFieldCheckers, "input field")
-		if err != nil {
-			return nil, err
-		}
-		if fieldType == nil {
-			return nil, fmt.Errorf("unsupported field type for input: %s", f.Type.String())
-		}
-		name := fieldName(&f)
-		value, err := defaultValue(&f)
-		if err != nil {
-			panic(err)
-		}
-		fields[name] = &graphql.InputObjectFieldConfig{
-			Description:  desc(&f),
-			Type:         fieldType,
-			DefaultValue: value,
-		}
+	config := inputLazyConfig{fields: graphql.InputObjectConfigFieldMap{}}
+	if err := engine.unwrapInputFields(info.baseType, &config); err != nil {
+		return nil, err
 	}
 
 	input := newPrototype(info.implType).(Input)
@@ -81,7 +106,7 @@ func (engine *Engine) collectInput(info *unwrappedInfo) (graphql.Type, error) {
 	d := graphql.NewInputObject(graphql.InputObjectConfig{
 		Name:        name,
 		Description: input.GraphQLInputDescription(),
-		Fields:      fields,
+		Fields:      config.fields,
 		ParseValue:  parseValue,
 	})
 
