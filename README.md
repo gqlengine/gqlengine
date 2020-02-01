@@ -117,10 +117,8 @@ open browser, you can get the [playground](http://localhost:9996/api/graphql/pla
   - [ ] Directive tags
 - [x] Subscription (Integerates Websocket)
 - [x] Upload
-- [ ] Relay features
 - [x] ID mapping
 - [x] Tracing extensions
-- [x] Pagination query
 - [x] document tags
 - [x] operation hijacking
 

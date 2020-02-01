@@ -271,3 +271,26 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 
 	return &resolver, nil
 }
+
+func (engine *Engine) AddResolver(field string, resolve interface{}) error {
+	if field == "" {
+		return fmt.Errorf("requires the field name")
+	}
+	if resolve == nil {
+		return fmt.Errorf("missing resolve funtion")
+	}
+	resolver, err := engine.analysisResolver(field, resolve)
+	if err != nil {
+		return err
+	}
+	if resolver.isBatch {
+		if resolvers, ok := engine.batchResolvers[resolver.source]; ok {
+			resolvers[field] = resolver.fn
+		}
+	} else {
+		if resolvers, ok := engine.objResolvers[resolver.source]; ok {
+			resolvers[field] = resolver.fn
+		}
+	}
+	return nil
+}
