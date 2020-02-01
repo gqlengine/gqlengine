@@ -157,7 +157,12 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 			}
 			resolver.isBatch = info.array
 			resolver.sourceInfo = info
-		} else { // fixme: add selection set builder
+		} else if selBuilder, err := engine.asFieldSelection(in); err != nil || selBuilder != nil {
+			if err != nil {
+				return nil, err
+			}
+			builder = selBuilder
+		} else {
 			return nil, fmt.Errorf("unsupported argument type [%d]: '%s'", i, in)
 		}
 		argumentBuilders[i] = builder
