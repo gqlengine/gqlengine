@@ -103,7 +103,7 @@ func (engine *Engine) collectInput(info *unwrappedInfo, description string) (gra
 	}
 
 	var input Input
-	if description != "" {
+	if description == "" {
 		input = newPrototype(info.implType).(Input)
 	}
 

@@ -144,7 +144,7 @@ func (engine *Engine) collectObject(info *unwrappedInfo, desc string) (graphql.T
 	}
 
 	var prototype Object
-	if desc != "" {
+	if desc == "" {
 		prototype = newPrototype(info.implType).(Object)
 	}
 
