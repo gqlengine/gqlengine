@@ -44,6 +44,10 @@ func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*gr
 	}
 	description := ""
 	if !isInterface {
+		info, err = unwrap(p)
+		if err != nil {
+			return nil, &info, err
+		}
 		idx, tag := findBaseTypeFieldTag(info.baseType, _isGraphQLInterfaceType)
 		if idx < 0 {
 			return nil, &info, nil

@@ -143,6 +143,10 @@ func (engine *Engine) asInputField(field *reflect.StructField) (graphql.Type, *u
 	}
 	description := ""
 	if !isInput {
+		info, err = unwrap(field.Type)
+		if err != nil {
+			return nil, &info, err
+		}
 		idx, tag := findBaseTypeFieldTag(info.baseType, _isGraphQLInputType)
 		if idx < 0 {
 			return nil, &info, nil

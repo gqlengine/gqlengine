@@ -220,6 +220,10 @@ func (engine *Engine) asObject(p reflect.Type) (typ graphql.Type, info unwrapped
 	}
 	var description string
 	if !isObj {
+		info, err = unwrap(p)
+		if err != nil {
+			return
+		}
 		fieldIdx, tag := findBaseTypeFieldTag(info.baseType, _isGraphQLObjectType)
 		if fieldIdx < 0 {
 			return

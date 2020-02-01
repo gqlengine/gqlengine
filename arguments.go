@@ -135,6 +135,10 @@ func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, *unwrapp
 		return nil, &info, fmt.Errorf("arguments object should not be a slice/array")
 	}
 	if !isArg {
+		info, err = unwrap(arg)
+		if err != nil {
+			return nil, &info, err
+		}
 		idx, _ := findBaseTypeFieldTag(info.baseType, _isGraphQLArguments)
 		if idx < 0 {
 			return nil, &info, nil
