@@ -45,8 +45,10 @@ func boolTag(field *reflect.StructField, tagName string) bool {
 func isRequired(field *reflect.StructField) bool        { return boolTag(field, "gqlRequired") }
 func isElementRequired(field *reflect.StructField) bool { return boolTag(field, "gqlElementRequired") }
 
+const gqlDesc = "gqlDesc"
+
 func desc(field *reflect.StructField) string {
-	return field.Tag.Get("gqlDesc")
+	return field.Tag.Get(gqlDesc)
 }
 
 func defaultValue(field *reflect.StructField) (interface{}, error) {
@@ -104,7 +106,9 @@ func unwrap(p reflect.Type) (unwrappedInfo, error) {
 	switch p.Kind() {
 	case reflect.Slice, reflect.Array:
 		info, err := unwrap(p.Elem())
-		info.array = true
+		if err == nil {
+			info.array = true
+		}
 		return info, err
 	case reflect.Ptr:
 		b := p.Elem()
@@ -148,7 +152,9 @@ func implementsOf(p reflect.Type, intf reflect.Type) (implemented bool, info unw
 		e := p.Elem()
 		if e.Kind() == reflect.Ptr || isBaseType(e) {
 			implemented, info, err = implementsOf(p.Elem(), intf)
-			info.array = true
+			if err == nil {
+				info.array = true
+			}
 		} else {
 			err = fmt.Errorf("'%s' is illegal as an element of slice/array", e.String())
 		}
@@ -509,4 +515,31 @@ func getFuncName(fn interface{}) string {
 
 func getEntryFuncName(fn interface{}) string {
 	return strcase.ToLowerCamel(getFuncName(fn))
+}
+
+func isMatchedFieldType(fieldType reflect.Type, matchWith reflect.Type) bool {
+	if fieldType.Kind() == reflect.Ptr {
+		if fieldType.Elem() == matchWith {
+			return true
+		}
+	} else if fieldType == matchWith {
+		return true
+	}
+	return false
+}
+
+func findBaseTypeFieldTag(baseType reflect.Type, matchWith reflect.Type) (index int, tag reflect.StructTag) {
+	index = -1
+	if baseType.Kind() != reflect.Struct {
+		return
+	}
+	for i := 0; i < baseType.NumField(); i++ {
+		f := baseType.Field(i)
+		if isMatchedFieldType(f.Type, matchWith) {
+			index = i
+			tag = f.Tag
+			return
+		}
+	}
+	return
 }

@@ -21,6 +21,11 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
+const (
+	DefaultPaginationPage = 1
+	DefaultPaginationSize = 10
+)
+
 type Pagination struct {
 	Page int `json:"page" gqlDesc:"page index" gqlDefault:"1"`
 	Size int `json:"size" gqlDesc:"page size" gqlDefault:"10"`
@@ -44,11 +49,11 @@ func (p Pagination) GraphQLInputDescription() string {
 func (p Pagination) Offset() int {
 	page := p.Page
 	if page <= 0 {
-		page = 1
+		page = DefaultPaginationPage
 	}
 	sz := p.Size
 	if sz <= 0 {
-		sz = 10
+		sz = DefaultPaginationSize
 	}
 	return (page - 1) * sz
 }
@@ -57,13 +62,13 @@ func (p Pagination) Limit() int {
 	if p.Size > 0 {
 		return p.Size
 	}
-	return 10
+	return DefaultPaginationSize
 }
 
 func getPaginationFromParams(p graphql.ResolveParams) Pagination {
 	pagination := Pagination{
-		Page: 1,
-		Size: 10,
+		Page: DefaultPaginationPage,
+		Size: DefaultPaginationSize,
 	}
 	_ = mapstructure.WeakDecode(p.Args, &pagination)
 	return pagination

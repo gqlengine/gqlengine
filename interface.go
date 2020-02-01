@@ -30,33 +30,52 @@ type NameAlterableInterface interface {
 	GraphQLInterfaceName() string
 }
 
-var interfaceType = reflect.TypeOf((*Interface)(nil)).Elem()
+type IsGraphQLInterface struct{}
+
+var (
+	_interfaceType          = reflect.TypeOf((*Interface)(nil)).Elem()
+	_isGraphQLInterfaceType = reflect.TypeOf(IsGraphQLInterface{})
+)
 
 func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*graphql.Interface, *unwrappedInfo, error) {
-	isInterface, info, err := implementsOf(p, interfaceType)
+	isInterface, info, err := implementsOf(p, _interfaceType)
 	if err != nil {
 		return nil, &info, err
 	}
+	description := ""
 	if !isInterface {
-		return nil, &info, nil
+		idx, tag := findBaseTypeFieldTag(info.baseType, _isGraphQLInterfaceType)
+		if idx < 0 {
+			return nil, &info, nil
+		}
+		description = tag.Get(gqlDesc)
+		if description == "" {
+			return nil, &info, fmt.Errorf("mark %s as 'IsGraphQLInterface' but missing 'gqlDesc' tag", p.String())
+		}
 	}
 
 	if i, ok := engine.types[info.baseType]; ok {
 		return i.(*graphql.Interface), &info, nil
 	}
 
-	if prototype == nil {
+	if description == "" && prototype == nil {
 		prototype = newPrototype(info.implType).(Interface)
 	}
 
 	name := info.baseType.Name()
-	if p, ok := prototype.(NameAlterableInterface); ok {
-		name = p.GraphQLInterfaceName()
+	if prototype != nil {
+		if p, ok := prototype.(NameAlterableInterface); ok {
+			name = p.GraphQLInterfaceName()
+		}
+	}
+
+	if prototype != nil {
+		description = prototype.GraphQLInterfaceDescription()
 	}
 
 	intf := graphql.NewInterface(graphql.InterfaceConfig{
 		Name:        name,
-		Description: prototype.GraphQLInterfaceDescription(),
+		Description: description,
 		Fields:      graphql.Fields{},
 	})
 
@@ -65,7 +84,7 @@ func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*gr
 	fieldsConfig := objectFieldLazyConfig{
 		fields: map[string]objectField{},
 	}
-	err = engine.objectFields(info.baseType, &fieldsConfig)
+	err = engine.objectFields(info.baseType, &fieldsConfig, true)
 	if err != nil {
 		return nil, &info, fmt.Errorf("check interface '%s' failed: %E", info.baseType.Name(), err)
 	}

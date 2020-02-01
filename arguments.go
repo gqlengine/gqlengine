@@ -26,7 +26,12 @@ type Arguments interface {
 	GraphQLArguments()
 }
 
-var _argumentsType = reflect.TypeOf((*Arguments)(nil)).Elem()
+type IsGraphQLArguments struct{}
+
+var (
+	_argumentsType      = reflect.TypeOf((*Arguments)(nil)).Elem()
+	_isGraphQLArguments = reflect.TypeOf(IsGraphQLArguments{})
+)
 
 type argumentsBuilder struct {
 	ptr bool
@@ -65,6 +70,9 @@ type argsLazyConfig struct {
 func (engine *Engine) unwrapArgsFields(baseType reflect.Type, config *argsLazyConfig) error {
 	for i := 0; i < baseType.NumField(); i++ {
 		f := baseType.Field(i)
+		if isIgnored(&f) || isMatchedFieldType(f.Type, _isGraphQLArguments) {
+			continue
+		}
 		if f.Anonymous {
 			// embedded
 			embeddedInfo, err := unwrap(f.Type)
@@ -123,11 +131,14 @@ func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, *unwrapp
 	if err != nil {
 		return nil, &info, err
 	}
-	if !isArg {
-		return nil, &info, nil
-	}
 	if info.array {
 		return nil, &info, fmt.Errorf("arguments object should not be a slice/array")
+	}
+	if !isArg {
+		idx, _ := findBaseTypeFieldTag(info.baseType, _isGraphQLArguments)
+		if idx < 0 {
+			return nil, &info, nil
+		}
 	}
 	_, err = engine.collectFieldArgumentConfig(info.baseType)
 	if err != nil {

@@ -40,7 +40,12 @@ type ObjectDelegation interface {
 	GraphQLObjectDelegation() interface{}
 }
 
-var objectType = reflect.TypeOf((*Object)(nil)).Elem()
+type IsGraphQLObject struct{}
+
+var (
+	_objectType          = reflect.TypeOf((*Object)(nil)).Elem()
+	_isGraphQLObjectType = reflect.TypeOf(IsGraphQLObject{})
+)
 
 type objectSourceBuilder struct {
 	unwrappedInfo
@@ -52,11 +57,17 @@ func (o *objectSourceBuilder) build(params graphql.ResolveParams) (reflect.Value
 
 type objectResolvers map[string]graphql.FieldResolveFn
 
-func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLazyConfig) error {
+func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLazyConfig, asInterface bool) error {
 	for i := 0; i < baseType.NumField(); i++ {
 		f := baseType.Field(i)
 
 		if isIgnored(&f) {
+			continue
+		}
+		if asInterface && isMatchedFieldType(f.Type, _isGraphQLInterfaceType) {
+			continue
+		}
+		if !asInterface && isMatchedFieldType(f.Type, _isGraphQLObjectType) {
 			continue
 		}
 
@@ -69,7 +80,7 @@ func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLaz
 			if embeddedInfo.array {
 				return fmt.Errorf("embedded object type should be struct")
 			}
-			err = engine.objectFields(embeddedInfo.baseType, config)
+			err = engine.objectFields(embeddedInfo.baseType, config, false)
 			if err != nil {
 				return err
 			}
@@ -127,59 +138,72 @@ func (c *objectFieldLazyConfig) getFields(obj reflect.Type, engine *Engine) grap
 	}
 }
 
-func (engine *Engine) collectObject(info *unwrappedInfo) (graphql.Type, error) {
+func (engine *Engine) collectObject(info *unwrappedInfo, desc string) (graphql.Type, error) {
 	if obj, ok := engine.types[info.baseType]; ok {
 		return obj, nil
 	}
 
-	prototype := newPrototype(info.implType).(Object)
+	var prototype Object
+	if desc != "" {
+		prototype = newPrototype(info.implType).(Object)
+	}
 
 	name := info.baseType.Name()
-	if rename, ok := prototype.(NameAlterableObject); ok {
-		name = rename.GraphQLObjectName()
+	if prototype != nil {
+		if rename, ok := prototype.(NameAlterableObject); ok {
+			name = rename.GraphQLObjectName()
+		}
 	}
 
 	baseType := info.baseType
-	if delegated, ok := prototype.(ObjectDelegation); ok {
-		objPrototype := delegated.GraphQLObjectDelegation()
-		delegatedType := reflect.TypeOf(objPrototype)
-		info, err := unwrap(delegatedType)
-		if err != nil {
-			return nil, fmt.Errorf("collect delegated object failure %E", err)
+	if prototype != nil {
+		if delegated, ok := prototype.(ObjectDelegation); ok {
+			objPrototype := delegated.GraphQLObjectDelegation()
+			delegatedType := reflect.TypeOf(objPrototype)
+			info, err := unwrap(delegatedType)
+			if err != nil {
+				return nil, fmt.Errorf("collect delegated object failure %E", err)
+			}
+			if info.array {
+				return nil, fmt.Errorf("delegated prototype should not be non-struct")
+			}
+			if info.baseType.Kind() != reflect.Struct {
+				return nil, fmt.Errorf("delegated type of '%s' should be an object but '%s'",
+					baseType.Name(), delegatedType.String())
+			}
+			baseType = info.baseType
 		}
-		if info.array {
-			return nil, fmt.Errorf("delegated prototype should not be non-struct")
-		}
-		if info.baseType.Kind() != reflect.Struct {
-			return nil, fmt.Errorf("delegated type of '%s' should be an object but '%s'",
-				baseType.Name(), delegatedType.String())
-		}
-		baseType = info.baseType
 	}
 
 	fieldsConfig := objectFieldLazyConfig{
 		fields: map[string]objectField{},
 	}
-	err := engine.objectFields(baseType, &fieldsConfig)
+	err := engine.objectFields(baseType, &fieldsConfig, false)
 	if err != nil {
 		return nil, err
 	}
 
 	var intfs graphql.Interfaces
-	if impl, ok := prototype.(ImplementedObject); ok {
-		for _, intfPrototype := range impl.GraphQLObjectInterfaces() {
-			intf, err := engine.asInterfaceFromPrototype(intfPrototype)
-			if err != nil {
-				return nil, fmt.Errorf("check type '%s' implemented infterface '%s' failed %E",
-					info.baseType.Name(), reflect.TypeOf(intfPrototype).Name(), err)
+	if prototype != nil {
+		if impl, ok := prototype.(ImplementedObject); ok {
+			for _, intfPrototype := range impl.GraphQLObjectInterfaces() {
+				intf, err := engine.asInterfaceFromPrototype(intfPrototype)
+				if err != nil {
+					return nil, fmt.Errorf("check type '%s' implemented infterface '%s' failed %E",
+						info.baseType.Name(), reflect.TypeOf(intfPrototype).Name(), err)
+				}
+				intfs = append(intfs, intf)
 			}
-			intfs = append(intfs, intf)
 		}
+	}
+
+	if prototype != nil {
+		desc = prototype.GraphQLObjectDescription()
 	}
 
 	object := graphql.NewObject(graphql.ObjectConfig{
 		Name:        name,
-		Description: prototype.GraphQLObjectDescription(),
+		Description: desc,
 		Fields:      fieldsConfig.getFields(info.baseType, engine),
 		Interfaces:  intfs,
 	})
@@ -188,29 +212,40 @@ func (engine *Engine) collectObject(info *unwrappedInfo) (graphql.Type, error) {
 	return object, nil
 }
 
+func (engine *Engine) asObject(p reflect.Type) (typ graphql.Type, info unwrappedInfo, err error) {
+	var isObj bool
+	isObj, info, err = implementsOf(p, _objectType)
+	if err != nil {
+		return
+	}
+	var description string
+	if !isObj {
+		fieldIdx, tag := findBaseTypeFieldTag(info.baseType, _isGraphQLObjectType)
+		if fieldIdx < 0 {
+			return
+		}
+		description = tag.Get(gqlDesc)
+		if description == "" {
+			err = fmt.Errorf("mark %s as 'IsGraphQLObject' but missing 'gqlDesc' tag", p.String())
+			return
+		}
+	}
+	typ, err = engine.collectObject(&info, description)
+	return
+}
+
 func (engine *Engine) asObjectSource(p reflect.Type) (resolverArgumentBuilder, *unwrappedInfo, error) {
-	isObj, info, err := implementsOf(p, objectType)
+	_, info, err := engine.asObject(p)
 	if err != nil {
 		return nil, &info, err
 	}
-	if !isObj {
-		return nil, &info, nil
-	}
-	engine.collectObject(&info)
 	return &objectSourceBuilder{
 		unwrappedInfo: info,
 	}, &info, nil
 }
 
 func (engine *Engine) asObjectResult(p reflect.Type) (*unwrappedInfo, error) {
-	isObj, info, err := implementsOf(p, objectType)
-	if err != nil {
-		return &info, err
-	}
-	if !isObj {
-		return nil, nil
-	}
-	_, err = engine.collectObject(&info)
+	_, info, err := engine.asObject(p)
 	if err != nil {
 		return &info, err
 	}
@@ -218,14 +253,7 @@ func (engine *Engine) asObjectResult(p reflect.Type) (*unwrappedInfo, error) {
 }
 
 func (engine *Engine) asObjectField(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
-	isObj, info, err := implementsOf(field.Type, objectType)
-	if err != nil {
-		return nil, &info, err
-	}
-	if !isObj {
-		return nil, &info, nil
-	}
-	typ, err := engine.collectObject(&info)
+	typ, info, err := engine.asObject(field.Type)
 	if err != nil {
 		return nil, &info, err
 	}

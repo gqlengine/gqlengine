@@ -35,7 +35,12 @@ type CustomParserInput interface {
 	GraphQLInputParseValue(map[string]interface{}) interface{}
 }
 
-var _inputType = reflect.TypeOf((*Input)(nil)).Elem()
+type IsGraphQLInput struct{}
+
+var (
+	_inputType          = reflect.TypeOf((*Input)(nil)).Elem()
+	_isGraphQLInputType = reflect.TypeOf(IsGraphQLInput{})
+)
 
 type inputLazyConfig struct {
 	fields graphql.InputObjectConfigFieldMap
@@ -44,6 +49,11 @@ type inputLazyConfig struct {
 func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazyConfig) error {
 	for i := 0; i < baseType.NumField(); i++ {
 		f := baseType.Field(i)
+
+		if isIgnored(&f) || isMatchedFieldType(f.Type, _isGraphQLInputType) {
+			continue
+		}
+
 		if f.Anonymous {
 			embeddedInfo, err := unwrap(f.Type)
 			if err != nil {
@@ -79,7 +89,7 @@ func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazy
 	return nil
 }
 
-func (engine *Engine) collectInput(info *unwrappedInfo) (graphql.Type, error) {
+func (engine *Engine) collectInput(info *unwrappedInfo, description string) (graphql.Type, error) {
 	if input, ok := engine.types[info.baseType]; ok {
 		if input != nil {
 			return input, nil
@@ -92,20 +102,32 @@ func (engine *Engine) collectInput(info *unwrappedInfo) (graphql.Type, error) {
 		return nil, err
 	}
 
-	input := newPrototype(info.implType).(Input)
+	var input Input
+	if description != "" {
+		input = newPrototype(info.implType).(Input)
+	}
+
 	name := info.baseType.Name()
-	if rename, ok := input.(NameAlterableInput); ok {
-		name = rename.GraphQLInputName()
+	if input != nil {
+		if rename, ok := input.(NameAlterableInput); ok {
+			name = rename.GraphQLInputName()
+		}
 	}
 
 	var parseValue graphql.ParseInputValueFn
-	if customParse, ok := input.(CustomParserInput); ok {
-		parseValue = customParse.GraphQLInputParseValue
+	if input != nil {
+		if customParse, ok := input.(CustomParserInput); ok {
+			parseValue = customParse.GraphQLInputParseValue
+		}
+	}
+
+	if input != nil {
+		description = input.GraphQLInputDescription()
 	}
 
 	d := graphql.NewInputObject(graphql.InputObjectConfig{
 		Name:        name,
-		Description: input.GraphQLInputDescription(),
+		Description: description,
 		Fields:      config.fields,
 		ParseValue:  parseValue,
 	})
@@ -119,10 +141,18 @@ func (engine *Engine) asInputField(field *reflect.StructField) (graphql.Type, *u
 	if err != nil {
 		return nil, &info, err
 	}
+	description := ""
 	if !isInput {
-		return nil, &info, nil
+		idx, tag := findBaseTypeFieldTag(info.baseType, _isGraphQLInputType)
+		if idx < 0 {
+			return nil, &info, nil
+		}
+		description = tag.Get(gqlDesc)
+		if description == "" {
+			return nil, &info, fmt.Errorf("mark %s as 'IsGraphQLInput' but missing 'gqlDesc' tag", field.Type.String())
+		}
 	}
-	gtype, err := engine.collectInput(&info)
+	gtype, err := engine.collectInput(&info, description)
 	if err != nil {
 		return nil, &info, err
 	}
