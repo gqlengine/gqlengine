@@ -146,7 +146,7 @@ func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Val
 	var (
 		args reflect.Type
 	)
-	argumentBuilders := make([]resolverArgumentBuilder, fnType.NumIn())
+	argumentBuilders := make([]resolverArgumentBuilder, fnType.NumIn()-1)
 
 	for i := 1; i < fnType.NumIn(); i++ {
 		in := fnType.In(i)
@@ -173,7 +173,7 @@ func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Val
 		} else {
 			return nil, fmt.Errorf("unsupported argument type [%d]: '%s' in field resolver %s", i, in, fnType)
 		}
-		argumentBuilders[i] = builder
+		argumentBuilders[i-1] = builder
 	}
 
 	resultIdx := -1
@@ -206,7 +206,7 @@ func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Val
 	}
 
 	return func(p graphql.ResolveParams) (r interface{}, ctx context.Context, err error) {
-		args := make([]reflect.Value, len(argumentBuilders))
+		args := make([]reflect.Value, len(argumentBuilders)+1)
 		args[0] = reflect.ValueOf(p.Source)
 		for i, b := range argumentBuilders {
 			var arg reflect.Value
