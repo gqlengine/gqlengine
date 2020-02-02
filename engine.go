@@ -27,18 +27,17 @@ const (
 )
 
 type Engine struct {
-	initialized       bool
-	opts              Options
-	schema            graphql.Schema
-	query             *graphql.Object
-	mutation          *graphql.Object
-	subscription      *graphql.Object
-	types             map[reflect.Type]graphql.Type
-	idTypes           map[reflect.Type]struct{}
-	argConfigs        map[reflect.Type]graphql.FieldConfigArgument
-	reqCtx            map[reflect.Type]reflect.Type
-	respCtx           map[reflect.Type]reflect.Type
-	paginationResults map[reflect.Type]*graphql.Object
+	initialized  bool
+	opts         Options
+	schema       graphql.Schema
+	query        *graphql.Object
+	mutation     *graphql.Object
+	subscription *graphql.Object
+	types        map[reflect.Type]graphql.Type
+	idTypes      map[reflect.Type]struct{}
+	argConfigs   map[reflect.Type]graphql.FieldConfigArgument
+	reqCtx       map[reflect.Type]reflect.Type
+	respCtx      map[reflect.Type]reflect.Type
 
 	resultCheckers        []resolveResultChecker
 	inputFieldCheckers    []fieldChecker
@@ -61,14 +60,13 @@ func NewEngine(options Options) *Engine {
 		options.MultipartParsingBufferSize = DefaultMultipartParsingBufferSize
 	}
 	engine := &Engine{
-		opts:              options,
-		types:             map[reflect.Type]graphql.Type{},
-		idTypes:           map[reflect.Type]struct{}{},
-		argConfigs:        map[reflect.Type]graphql.FieldConfigArgument{},
-		reqCtx:            map[reflect.Type]reflect.Type{},
-		respCtx:           map[reflect.Type]reflect.Type{},
-		paginationResults: map[reflect.Type]*graphql.Object{},
-		tags:              map[string]*tagEntries{},
+		opts:       options,
+		types:      map[reflect.Type]graphql.Type{},
+		idTypes:    map[reflect.Type]struct{}{},
+		argConfigs: map[reflect.Type]graphql.FieldConfigArgument{},
+		reqCtx:     map[reflect.Type]reflect.Type{},
+		respCtx:    map[reflect.Type]reflect.Type{},
+		tags:       map[string]*tagEntries{},
 	}
 	engine.resultCheckers = []resolveResultChecker{
 		asBuiltinScalarResult,
