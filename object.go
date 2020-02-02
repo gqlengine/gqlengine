@@ -96,21 +96,19 @@ func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLaz
 		}
 
 		config.fields[fieldName(&f)] = objectField{
-			typ:            fieldType,
-			desc:           desc(&f),
-			needBeResolved: needBeResolved(&f),
-			deprecated:     deprecatedReason(&f),
+			typ:        fieldType,
+			desc:       desc(&f),
+			deprecated: deprecatedReason(&f),
 		}
 	}
 	return nil
 }
 
 type objectField struct {
-	name           string
-	typ            graphql.Type
-	desc           string
-	needBeResolved bool
-	deprecated     string
+	name       string
+	typ        graphql.Type
+	desc       string
+	deprecated string
 }
 
 type objectFieldLazyConfig struct {
@@ -126,11 +124,6 @@ func (c *objectFieldLazyConfig) getFields(obj reflect.Type, engine *Engine) grap
 				Description:       config.desc,
 				Type:              config.typ,
 				DeprecationReason: config.deprecated,
-			}
-			if config.needBeResolved {
-				if resolvers, ok := engine.objResolvers[obj]; ok {
-					f.Resolve = resolvers[name]
-				}
 			}
 			fields[name] = f
 		}

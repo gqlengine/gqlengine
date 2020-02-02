@@ -39,8 +39,6 @@ type Engine struct {
 	reqCtx            map[reflect.Type]reflect.Type
 	respCtx           map[reflect.Type]reflect.Type
 	paginationResults map[reflect.Type]*graphql.Object
-	objResolvers      map[reflect.Type]objectResolvers
-	batchResolvers    map[reflect.Type]objectResolvers
 
 	resultCheckers        []resolveResultChecker
 	inputFieldCheckers    []fieldChecker
@@ -70,8 +68,6 @@ func NewEngine(options Options) *Engine {
 		reqCtx:            map[reflect.Type]reflect.Type{},
 		respCtx:           map[reflect.Type]reflect.Type{},
 		paginationResults: map[reflect.Type]*graphql.Object{},
-		objResolvers:      map[reflect.Type]objectResolvers{},
-		batchResolvers:    map[reflect.Type]objectResolvers{},
 		tags:              map[string]*tagEntries{},
 	}
 	engine.resultCheckers = []resolveResultChecker{
