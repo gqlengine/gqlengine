@@ -240,9 +240,9 @@ func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Val
 	}, nil
 }
 
-func (engine *Engine) checkFieldResolvers(baseType reflect.Type, fields *objectFieldLazyConfig) error {
-	for i := 0; i < baseType.NumMethod(); i++ {
-		method := baseType.Method(i)
+func (engine *Engine) checkFieldResolvers(implType reflect.Type, fields *objectFieldLazyConfig) error {
+	for i := 0; i < implType.NumMethod(); i++ {
+		method := implType.Method(i)
 		if strings.HasPrefix(method.Name, "Resolve") {
 			fieldName := strings.TrimPrefix(method.Name, "Resolve")
 			if f, ok := fields.fields[fieldName]; ok {
@@ -302,7 +302,7 @@ func (engine *Engine) collectObject(info *unwrappedInfo, desc string) (graphql.T
 	if err := engine.objectFields(baseType, &fieldsConfig, false); err != nil {
 		return nil, err
 	}
-	if err := engine.checkFieldResolvers(baseType, &fieldsConfig); err != nil {
+	if err := engine.checkFieldResolvers(info.implType, &fieldsConfig); err != nil {
 		return nil, err
 	}
 
