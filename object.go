@@ -302,7 +302,15 @@ func (engine *Engine) collectObject(info *unwrappedInfo, desc string) (graphql.T
 	if err := engine.objectFields(baseType, &fieldsConfig, false); err != nil {
 		return nil, err
 	}
-	if err := engine.checkFieldResolvers(info.implType, &fieldsConfig); err != nil {
+	if prototype != nil {
+		if err := engine.checkFieldResolvers(info.implType, &fieldsConfig); err != nil {
+			return nil, err
+		}
+	}
+	if err := engine.checkFieldResolvers(info.ptrType, &fieldsConfig); err != nil {
+		return nil, err
+	}
+	if err := engine.checkFieldResolvers(info.baseType, &fieldsConfig); err != nil {
 		return nil, err
 	}
 
