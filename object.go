@@ -18,7 +18,10 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"runtime/debug"
 	"strings"
+
+	"github.com/karfield/graphql/gqlerrors"
 
 	"github.com/iancoleman/strcase"
 
@@ -206,6 +209,18 @@ func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Val
 	}
 
 	return func(p graphql.ResolveParams) (r interface{}, ctx context.Context, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				if engine.opts.Debug {
+					debug.PrintStack()
+				}
+				if e, ok := r.(error); ok {
+					err = e
+				} else {
+					err = gqlerrors.InternalError(fmt.Sprintf("%v", r))
+				}
+			}
+		}()
 		args := make([]reflect.Value, len(argumentBuilders)+1)
 		args[0] = reflect.ValueOf(p.Source)
 		for i, b := range argumentBuilders {

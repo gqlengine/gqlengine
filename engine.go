@@ -49,6 +49,7 @@ type Engine struct {
 }
 
 type Options struct {
+	Debug                      bool
 	Tracing                    bool
 	WsSubProtocol              string
 	Tags                       bool

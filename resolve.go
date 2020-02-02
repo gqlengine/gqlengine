@@ -224,7 +224,9 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 		ctx = p.Context
 		defer func() {
 			if r := recover(); r != nil {
-				debug.PrintStack()
+				if engine.opts.Debug {
+					debug.PrintStack()
+				}
 				if err, ok := r.(error); ok {
 					ferr = err
 				} else {
