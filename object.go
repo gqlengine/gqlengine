@@ -148,7 +148,7 @@ func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Val
 	)
 	argumentBuilders := make([]resolverArgumentBuilder, fnType.NumIn())
 
-	for i := 0; i < fnType.NumIn(); i++ {
+	for i := 1; i < fnType.NumIn(); i++ {
 		in := fnType.In(i)
 		var builder resolverArgumentBuilder
 		if argsBuilder, _, err := engine.asArguments(in); err != nil || argsBuilder != nil {
@@ -206,7 +206,7 @@ func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Val
 	}
 
 	return func(p graphql.ResolveParams) (r interface{}, ctx context.Context, err error) {
-		args := make([]reflect.Value, len(argumentBuilders)+1)
+		args := make([]reflect.Value, len(argumentBuilders))
 		args[0] = reflect.ValueOf(p.Source)
 		for i, b := range argumentBuilders {
 			var arg reflect.Value
