@@ -220,9 +220,7 @@ func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Val
 		results := fn.Call(args)
 		if resultIdx >= 0 {
 			result := results[resultIdx]
-			if !result.IsNil() && !result.IsZero() && result.IsValid() {
-				r = result.Interface()
-			}
+			r = result.Interface()
 		}
 		if ctxOutIdx >= 0 {
 			c := results[ctxOutIdx]
