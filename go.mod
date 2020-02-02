@@ -21,7 +21,7 @@ require (
 	github.com/gobwas/pool v0.2.0 // indirect
 	github.com/gobwas/ws v1.0.2
 	github.com/iancoleman/strcase v0.0.0-20191112232945-16388991a334
-	github.com/karfield/graphql v0.7.9-0.20200115113251-0808ce50c724
+	github.com/karfield/graphql v0.7.9-0.20200202075508-2f0a70102c9e
 	github.com/klauspost/compress v1.9.5 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/valyala/fasthttp v1.7.1
