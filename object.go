@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/iancoleman/strcase"
+
 	"github.com/karfield/graphql"
 )
 
@@ -245,13 +247,26 @@ func (engine *Engine) checkFieldResolvers(implType reflect.Type, fields *objectF
 		method := implType.Method(i)
 		if strings.HasPrefix(method.Name, "Resolve") {
 			fieldName := strings.TrimPrefix(method.Name, "Resolve")
+			var field *objectField
+			fieldName = strcase.ToLowerCamel(fieldName)
 			if f, ok := fields.fields[fieldName]; ok {
+				field = f
+			} else {
+				for name, f := range fields.fields {
+					if strcase.ToLowerCamel(name) == fieldName {
+						field = f
+						break
+					}
+				}
+			}
+
+			if field != nil {
 				// check the method
-				if r, err := engine.checkFieldResolver(f.field.Type, method.Func); err != nil {
+				if r, err := engine.checkFieldResolver(field.field.Type, method.Func); err != nil {
 					return err
 				} else {
-					f.resolver = r
-					f.method = method
+					field.resolver = r
+					field.method = method
 				}
 			}
 		}
