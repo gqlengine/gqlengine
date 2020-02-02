@@ -15,8 +15,10 @@
 package gqlengine
 
 import (
+	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/karfield/graphql"
 )
@@ -55,7 +57,19 @@ func (o *objectSourceBuilder) build(params graphql.ResolveParams) (reflect.Value
 	return reflect.ValueOf(params.Source), nil
 }
 
-type objectResolvers map[string]graphql.FieldResolveFn
+type objectField struct {
+	name       string
+	typ        graphql.Type
+	desc       string
+	deprecated string
+	resolver   graphql.ResolveFieldWithContext
+	field      reflect.StructField
+	method     reflect.Method
+}
+
+type objectFieldLazyConfig struct {
+	fields map[string]*objectField
+}
 
 func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLazyConfig, asInterface bool) error {
 	for i := 0; i < baseType.NumField(); i++ {
@@ -95,27 +109,17 @@ func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLaz
 			panic(fmt.Errorf("unsupported field type: %s", f.Type.String()))
 		}
 
-		config.fields[fieldName(&f)] = objectField{
+		config.fields[fieldName(&f)] = &objectField{
 			typ:        fieldType,
 			desc:       desc(&f),
 			deprecated: deprecatedReason(&f),
+			field:      f,
 		}
 	}
 	return nil
 }
 
-type objectField struct {
-	name       string
-	typ        graphql.Type
-	desc       string
-	deprecated string
-}
-
-type objectFieldLazyConfig struct {
-	fields map[string]objectField
-}
-
-func (c *objectFieldLazyConfig) getFields(obj reflect.Type, engine *Engine) graphql.FieldsThunk {
+func (c *objectFieldLazyConfig) makeLazyField(obj reflect.Type, engine *Engine) graphql.FieldsThunk {
 	return func() graphql.Fields {
 		fields := graphql.Fields{}
 		for name, config := range c.fields {
@@ -125,10 +129,134 @@ func (c *objectFieldLazyConfig) getFields(obj reflect.Type, engine *Engine) grap
 				Type:              config.typ,
 				DeprecationReason: config.deprecated,
 			}
+			if config.resolver != nil {
+				f.Resolve = config.resolver
+			}
 			fields[name] = f
 		}
 		return fields
 	}
+}
+
+func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Value) (graphql.ResolveFieldWithContext, error) {
+	fnType := fn.Type()
+
+	var (
+		args reflect.Type
+	)
+	argumentBuilders := make([]resolverArgumentBuilder, fnType.NumIn())
+
+	for i := 0; i < fnType.NumIn(); i++ {
+		in := fnType.In(i)
+		var builder resolverArgumentBuilder
+		if argsBuilder, _, err := engine.asArguments(in); err != nil || argsBuilder != nil {
+			if err != nil {
+				return nil, fmt.Errorf("field resolver %s error: %E", fnType, err)
+			}
+			builder = argsBuilder
+			if args != nil {
+				return nil, fmt.Errorf("more than one 'arguments' parameter[%d] in field resolver %s", i, fnType)
+			}
+			args = in
+		} else if ctxBuilder, err := engine.asContextArgument(in); err != nil || ctxBuilder != nil {
+			if err != nil {
+				return nil, fmt.Errorf("field resolver %s error: %E", fnType, err)
+			}
+			builder = ctxBuilder
+		} else if selBuilder, err := engine.asFieldSelection(in); err != nil || selBuilder != nil {
+			if err != nil {
+				return nil, fmt.Errorf("field resolver %s error: %E", fnType, err)
+			}
+			builder = selBuilder
+		} else {
+			return nil, fmt.Errorf("unsupported argument type [%d]: '%s' in field resolver %s", i, in, fnType)
+		}
+		argumentBuilders[i] = builder
+	}
+
+	resultIdx := -1
+	ctxOutIdx := -1
+	errIdx := -1
+	for i := 0; i < fnType.NumOut(); i++ {
+		out := fnType.Out(i)
+		if out == resultType {
+			if resultIdx >= 0 {
+				return nil, fmt.Errorf("duplicated field results[%d] in field resolver %s", i, fnType.String())
+			} else {
+				resultIdx = i
+			}
+		} else if isCtx, _, err := engine.asContextMerger(out); isCtx || err != nil {
+			if err != nil {
+				return nil, fmt.Errorf("field resolver %s error: %E", fnType.String(), err)
+			}
+			if ctxOutIdx >= 0 {
+				return nil, fmt.Errorf("duplicated context out [%d] in field resolver %s", i, fnType.String())
+			} else {
+				ctxOutIdx = i
+			}
+		} else if engine.asErrorResult(out) {
+			if errIdx >= 0 {
+				return nil, fmt.Errorf("duplicated error out [%d] in field resolver %s", i, fnType.String())
+			} else {
+				errIdx = i
+			}
+		}
+	}
+
+	return func(p graphql.ResolveParams) (r interface{}, ctx context.Context, err error) {
+		args := make([]reflect.Value, len(argumentBuilders)+1)
+		args[0] = reflect.ValueOf(p.Source)
+		for i, b := range argumentBuilders {
+			var arg reflect.Value
+			arg, err = b.build(p)
+			if err != nil {
+				return
+			}
+			args[i+1] = arg
+		}
+
+		results := fn.Call(args)
+		if resultIdx >= 0 {
+			result := results[resultIdx]
+			if !result.IsNil() && !result.IsZero() && result.IsValid() {
+				r = result.Interface()
+			}
+		}
+		if ctxOutIdx >= 0 {
+			c := results[ctxOutIdx]
+			if c.IsNil() {
+				ctx = p.Context
+			} else {
+				ctx = c.Interface().(context.Context)
+			}
+		}
+		if errIdx >= 0 {
+			e := results[errIdx]
+			if !e.IsNil() {
+				err = e.Interface().(error)
+			}
+		}
+		return
+	}, nil
+}
+
+func (engine *Engine) checkFieldResolvers(baseType reflect.Type, fields *objectFieldLazyConfig) error {
+	for i := 0; i < baseType.NumMethod(); i++ {
+		method := baseType.Method(i)
+		if strings.HasPrefix(method.Name, "Resolve") {
+			fieldName := strings.TrimPrefix(method.Name, "Resolve")
+			if f, ok := fields.fields[fieldName]; ok {
+				// check the method
+				if r, err := engine.checkFieldResolver(f.field.Type, method.Func); err != nil {
+					return err
+				} else {
+					f.resolver = r
+					f.method = method
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (engine *Engine) collectObject(info *unwrappedInfo, desc string) (graphql.Type, error) {
@@ -169,10 +297,12 @@ func (engine *Engine) collectObject(info *unwrappedInfo, desc string) (graphql.T
 	}
 
 	fieldsConfig := objectFieldLazyConfig{
-		fields: map[string]objectField{},
+		fields: map[string]*objectField{},
 	}
-	err := engine.objectFields(baseType, &fieldsConfig, false)
-	if err != nil {
+	if err := engine.objectFields(baseType, &fieldsConfig, false); err != nil {
+		return nil, err
+	}
+	if err := engine.checkFieldResolvers(baseType, &fieldsConfig); err != nil {
 		return nil, err
 	}
 
@@ -197,7 +327,7 @@ func (engine *Engine) collectObject(info *unwrappedInfo, desc string) (graphql.T
 	object := graphql.NewObject(graphql.ObjectConfig{
 		Name:        name,
 		Description: desc,
-		Fields:      fieldsConfig.getFields(info.baseType, engine),
+		Fields:      fieldsConfig.makeLazyField(info.baseType, engine),
 		Interfaces:  intfs,
 	})
 	engine.types[info.baseType] = object
@@ -231,6 +361,7 @@ func (engine *Engine) asObject(p reflect.Type) (typ graphql.Type, info unwrapped
 	return
 }
 
+// deprecated
 func (engine *Engine) asObjectSource(p reflect.Type) (resolverArgumentBuilder, *unwrappedInfo, error) {
 	_, info, err := engine.asObject(p)
 	if err != nil {

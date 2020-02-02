@@ -53,7 +53,6 @@ type resolver struct {
 	out            reflect.Type
 	outInfo        *unwrappedInfo
 	resultBuilders []resolverResultBuilder
-	isBatch        bool
 }
 
 func (r resolver) buildArgs(p graphql.ResolveParams) ([]reflect.Value, error) {
@@ -145,18 +144,6 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 				return nil, err
 			}
 			builder = ctxBuilder
-		} else if objSource, info, err := engine.asObjectSource(in); err != nil || objSource != nil {
-			if err != nil {
-				return nil, err
-			}
-			builder = objSource
-			if resolver.source == nil {
-				resolver.source = in
-			} else {
-				return nil, fmt.Errorf("more than one source argument[%d]: '%s'", i, in)
-			}
-			resolver.isBatch = info.array
-			resolver.sourceInfo = info
 		} else if selBuilder, err := engine.asFieldSelection(in); err != nil || selBuilder != nil {
 			if err != nil {
 				return nil, err
@@ -203,20 +190,6 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 		} else if engine.asErrorResult(out) {
 			returnType = errorResultBuilder(0)
 		} else {
-			if resolver.isBatch {
-				if out.Kind() != reflect.Slice {
-					return nil, fmt.Errorf("expect slice of results, but '%s' in result[%d]", out, i)
-				}
-				out = out.Elem() // unwrap the slice
-			}
-			if sourceField != nil {
-				// compare out with sourceField.Type
-				if !checkResultType(sourceField.Type, out) {
-					return nil, fmt.Errorf("result type('%d') of resolve function is not match with field('%s') type('%s') of object",
-						out, sourceField.Name, sourceField.Type)
-				}
-			}
-
 			for _, check := range engine.resultCheckers {
 				if info, err := check(out); err != nil {
 					return nil, err
