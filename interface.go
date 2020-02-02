@@ -42,27 +42,24 @@ func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*gr
 	if err != nil {
 		return nil, &info, err
 	}
-	description := ""
+	var tag *reflect.StructTag
 	if !isInterface {
 		info, err = unwrap(p)
 		if err != nil {
 			return nil, &info, err
 		}
-		idx, tag := findBaseTypeFieldTag(info.baseType, _isGraphQLInterfaceType)
+		idx, t := findBaseTypeFieldTag(info.baseType, _isGraphQLInterfaceType)
 		if idx < 0 {
 			return nil, &info, nil
 		}
-		description = tag.Get(gqlDesc)
-		if description == "" {
-			return nil, &info, fmt.Errorf("mark %s as 'IsGraphQLInterface' but missing 'gqlDesc' tag", p.String())
-		}
+		tag = &t
 	}
 
 	if i, ok := engine.types[info.baseType]; ok {
 		return i.(*graphql.Interface), &info, nil
 	}
 
-	if description == "" && prototype == nil {
+	if tag == nil && prototype == nil {
 		prototype = newPrototype(info.implType).(Interface)
 	}
 
@@ -73,8 +70,17 @@ func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*gr
 		}
 	}
 
+	description := ""
 	if prototype != nil {
 		description = prototype.GraphQLInterfaceDescription()
+	}
+	if tag != nil {
+		if s := tag.Get(gqlName); s != "" {
+			name = s
+		}
+		if s := tag.Get(gqlDesc); s != "" {
+			description = s
+		}
 	}
 
 	intf := graphql.NewInterface(graphql.InterfaceConfig{

@@ -89,7 +89,7 @@ func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazy
 	return nil
 }
 
-func (engine *Engine) collectInput(info *unwrappedInfo, description string) (graphql.Type, error) {
+func (engine *Engine) collectInput(info *unwrappedInfo, tag *reflect.StructTag) (graphql.Type, error) {
 	if input, ok := engine.types[info.baseType]; ok {
 		if input != nil {
 			return input, nil
@@ -103,7 +103,7 @@ func (engine *Engine) collectInput(info *unwrappedInfo, description string) (gra
 	}
 
 	var input Input
-	if description == "" {
+	if tag == nil {
 		input = newPrototype(info.implType).(Input)
 	}
 
@@ -121,8 +121,17 @@ func (engine *Engine) collectInput(info *unwrappedInfo, description string) (gra
 		}
 	}
 
+	description := ""
 	if input != nil {
 		description = input.GraphQLInputDescription()
+	}
+	if tag != nil {
+		if s := tag.Get(gqlName); s != "" {
+			name = s
+		}
+		if s := tag.Get(gqlDesc); s != "" {
+			description = s
+		}
 	}
 
 	d := graphql.NewInputObject(graphql.InputObjectConfig{
@@ -141,22 +150,19 @@ func (engine *Engine) asInputField(field *reflect.StructField) (graphql.Type, *u
 	if err != nil {
 		return nil, &info, err
 	}
-	description := ""
+	var tag *reflect.StructTag
 	if !isInput {
 		info, err = unwrap(field.Type)
 		if err != nil {
 			return nil, &info, err
 		}
-		idx, tag := findBaseTypeFieldTag(info.baseType, _isGraphQLInputType)
+		idx, t := findBaseTypeFieldTag(info.baseType, _isGraphQLInputType)
 		if idx < 0 {
 			return nil, &info, nil
 		}
-		description = tag.Get(gqlDesc)
-		if description == "" {
-			return nil, &info, fmt.Errorf("mark %s as 'IsGraphQLInput' but missing 'gqlDesc' tag", field.Type.String())
-		}
+		tag = &t
 	}
-	gtype, err := engine.collectInput(&info, description)
+	gtype, err := engine.collectInput(&info, tag)
 	if err != nil {
 		return nil, &info, err
 	}

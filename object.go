@@ -287,13 +287,13 @@ func (engine *Engine) checkFieldResolvers(implType reflect.Type, fields *objectF
 	return nil
 }
 
-func (engine *Engine) collectObject(info *unwrappedInfo, desc string) (graphql.Type, error) {
+func (engine *Engine) collectObject(info *unwrappedInfo, tag *reflect.StructTag) (graphql.Type, error) {
 	if obj, ok := engine.types[info.baseType]; ok {
 		return obj, nil
 	}
 
 	var prototype Object
-	if desc == "" {
+	if tag == nil {
 		prototype = newPrototype(info.implType).(Object)
 	}
 
@@ -356,8 +356,17 @@ func (engine *Engine) collectObject(info *unwrappedInfo, desc string) (graphql.T
 		}
 	}
 
+	desc := ""
 	if prototype != nil {
 		desc = prototype.GraphQLObjectDescription()
+	}
+	if tag != nil {
+		if s := tag.Get(gqlName); s != "" {
+			name = s
+		}
+		if s := tag.Get(gqlDesc); s != "" {
+			desc = s
+		}
 	}
 
 	object := graphql.NewObject(graphql.ObjectConfig{
@@ -377,7 +386,7 @@ func (engine *Engine) asObject(p reflect.Type) (typ graphql.Type, info unwrapped
 	if err != nil {
 		return
 	}
-	var description string
+	var embeddedTag *reflect.StructTag
 	if !isObj {
 		info, err = unwrap(p)
 		if err != nil {
@@ -387,13 +396,9 @@ func (engine *Engine) asObject(p reflect.Type) (typ graphql.Type, info unwrapped
 		if fieldIdx < 0 {
 			return
 		}
-		description = tag.Get(gqlDesc)
-		if description == "" {
-			err = fmt.Errorf("mark %s as 'IsGraphQLObject' but missing 'gqlDesc' tag", p.String())
-			return
-		}
+		embeddedTag = &tag
 	}
-	typ, err = engine.collectObject(&info, description)
+	typ, err = engine.collectObject(&info, embeddedTag)
 	return
 }
 

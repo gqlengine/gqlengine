@@ -45,7 +45,10 @@ func boolTag(field *reflect.StructField, tagName string) bool {
 func isRequired(field *reflect.StructField) bool        { return boolTag(field, "gqlRequired") }
 func isElementRequired(field *reflect.StructField) bool { return boolTag(field, "gqlElementRequired") }
 
-const gqlDesc = "gqlDesc"
+const (
+	gqlName = "gqlName"
+	gqlDesc = "gqlDesc"
+)
 
 func desc(field *reflect.StructField) string {
 	return field.Tag.Get(gqlDesc)
