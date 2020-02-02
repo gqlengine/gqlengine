@@ -77,17 +77,6 @@ func fieldName(field *reflect.StructField) string {
 	return name
 }
 
-func needBeResolved(field *reflect.StructField) bool {
-	if v, ok := field.Tag.Lookup("gqlNeedResolver"); ok {
-		need, err := strconv.ParseBool(v)
-		if err != nil {
-			return false
-		}
-		return need
-	}
-	return false
-}
-
 func deprecatedReason(field *reflect.StructField) string {
 	if v, ok := field.Tag.Lookup("gqlDeprecated"); ok {
 		return v

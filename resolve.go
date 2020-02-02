@@ -48,8 +48,6 @@ type resolver struct {
 	argsInfo       *unwrappedInfo
 	argConfig      graphql.FieldConfigArgument
 	argBuilders    []resolverArgumentBuilder
-	source         reflect.Type
-	sourceInfo     *unwrappedInfo
 	out            reflect.Type
 	outInfo        *unwrappedInfo
 	resultBuilders []resolverResultBuilder
@@ -153,28 +151,6 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 			return nil, fmt.Errorf("unsupported argument type [%d]: '%s'", i, in)
 		}
 		argumentBuilders[i] = builder
-	}
-
-	var sourceField *reflect.StructField
-	if resolver.source != nil {
-		if fieldName == "" {
-			return nil, fmt.Errorf("unexpect source argument '%s'", resolver.source)
-		}
-		srcStructType := resolver.source
-		if srcStructType.Kind() == reflect.Ptr {
-			srcStructType = srcStructType.Elem()
-		}
-		for i := 0; i < srcStructType.NumField(); i++ {
-			f := srcStructType.Field(i)
-			if f.Name == fieldName {
-				sourceField = &f
-			}
-		}
-		if sourceField != nil {
-			if !needBeResolved(sourceField) {
-				return nil, fmt.Errorf("the field need not be resolved")
-			}
-		}
 	}
 
 	for i := 0; i < resolveFnType.NumOut(); i++ {
