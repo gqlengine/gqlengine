@@ -15,6 +15,7 @@
 package gqlengine
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/karfield/graphql"
@@ -90,4 +91,22 @@ func (engine *Engine) asEnumResult(out reflect.Type) (*unwrappedInfo, error) {
 	}
 	engine.collectEnum(&info)
 	return &info, nil
+}
+
+func (engine *Engine) RegisterEnum(prototype interface{}) (*graphql.Enum, error) {
+	typ := reflect.TypeOf(prototype)
+	isEnum, info, err := implementsOf(typ, enumType)
+	if err != nil {
+		return nil, err
+	}
+	if !isEnum {
+		return nil, nil
+	}
+	engine.collectEnum(&info)
+	if t, ok := engine.types[info.baseType]; ok {
+		if e, ok := t.(*graphql.Enum); ok {
+			return e, nil
+		}
+	}
+	return nil, fmt.Errorf("register failed")
 }
