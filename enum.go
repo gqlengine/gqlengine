@@ -15,7 +15,6 @@
 package gqlengine
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/karfield/graphql"
@@ -40,9 +39,9 @@ type NameAlterableEnum interface {
 
 var enumType = reflect.TypeOf((*Enum)(nil)).Elem()
 
-func (engine *Engine) collectEnum(info *unwrappedInfo) graphql.Type {
+func (engine *Engine) collectEnum(info *unwrappedInfo) *graphql.Enum {
 	if d, ok := engine.types[info.baseType]; ok {
-		return d
+		return d.(*graphql.Enum)
 	}
 	enum := newPrototype(info.implType).(Enum)
 
@@ -76,7 +75,7 @@ func (engine *Engine) asEnumField(field *reflect.StructField) (graphql.Type, *un
 	if !isEnum {
 		return nil, &info, nil
 	}
-	var gType = engine.collectEnum(&info)
+	var gType graphql.Type = engine.collectEnum(&info)
 	gType = wrapType(field, gType, info.array)
 	return gType, &info, nil
 }
@@ -102,11 +101,5 @@ func (engine *Engine) RegisterEnum(prototype interface{}) (*graphql.Enum, error)
 	if !isEnum {
 		return nil, nil
 	}
-	engine.collectEnum(&info)
-	if t, ok := engine.types[info.baseType]; ok {
-		if e, ok := t.(*graphql.Enum); ok {
-			return e, nil
-		}
-	}
-	return nil, fmt.Errorf("register failed")
+	return engine.collectEnum(&info), nil
 }

@@ -15,7 +15,6 @@
 package gqlengine
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/karfield/graphql"
@@ -40,7 +39,7 @@ type NameAlterableScalar interface {
 
 var scalarType = reflect.TypeOf((*Scalar)(nil)).Elem()
 
-func (engine *Engine) collectCustomScalar(info *unwrappedInfo) graphql.Type {
+func (engine *Engine) collectCustomScalar(info *unwrappedInfo) *graphql.Scalar {
 	if s, ok := engine.types[info.baseType]; ok {
 		return s
 	}
@@ -120,11 +119,5 @@ func (engine *Engine) RegisterScalar(prototype interface{}) (*graphql.Scalar, er
 	if !isScalar {
 		return nil, nil
 	}
-	engine.collectCustomScalar(&info)
-	if t, ok := engine.types[info.baseType]; ok {
-		if s, ok := t.(*graphql.Scalar); ok {
-			return s, nil
-		}
-	}
-	return nil, fmt.Errorf("register failed")
+	return engine.collectCustomScalar(&info), nil
 }

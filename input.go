@@ -118,7 +118,7 @@ func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazy
 	return nil
 }
 
-func (engine *Engine) collectInput(info *unwrappedInfo, tag *reflect.StructTag) (graphql.Type, error) {
+func (engine *Engine) collectInput(info *unwrappedInfo, tag *reflect.StructTag) (*graphql.InputObject, error) {
 	if input, ok := engine.types[info.baseType]; ok {
 		if input != nil {
 			return input, nil
@@ -217,4 +217,16 @@ func (engine *Engine) asInputField(field *reflect.StructField) (graphql.Type, *u
 		return nil, &info, err
 	}
 	return wrapType(field, gtype, info.array), &info, nil
+}
+
+func (engine *Engine) RegisterInput(prototype interface{}) (*graphql.InputObject, error) {
+	typ := reflect.TypeOf(prototype)
+	isInput, info, err := implementsOf(typ, _inputType)
+	if err != nil {
+		return nil, err
+	}
+	if !isInput {
+		return nil, nil
+	}
+	return engine.collectInput(&info, nil)
 }
