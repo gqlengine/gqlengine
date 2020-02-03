@@ -15,6 +15,7 @@
 package gqlengine
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/karfield/graphql"
@@ -108,4 +109,22 @@ func (engine *Engine) asCustomScalarResult(out reflect.Type) (*unwrappedInfo, er
 	}
 	engine.collectCustomScalar(&info)
 	return &info, nil
+}
+
+func (engine *Engine) RegisterScalar(prototype interface{}) (*graphql.Scalar, error) {
+	typ := reflect.TypeOf(prototype)
+	isScalar, info, err := implementsOf(typ, scalarType)
+	if err != nil {
+		return nil, err
+	}
+	if !isScalar {
+		return nil, nil
+	}
+	engine.collectCustomScalar(&info)
+	if t, ok := engine.types[info.baseType]; ok {
+		if s, ok := t.(*graphql.Scalar); ok {
+			return s, nil
+		}
+	}
+	return nil, fmt.Errorf("register failed")
 }

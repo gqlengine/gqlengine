@@ -527,14 +527,14 @@ func isEmptyStructField(field *reflect.StructField) bool {
 }
 
 func isMatchedFieldType(fieldType reflect.Type, matchWith reflect.Type) bool {
+	return unwrapPointedFieldType(fieldType) == matchWith
+}
+
+func unwrapPointedFieldType(fieldType reflect.Type) reflect.Type {
 	if fieldType.Kind() == reflect.Ptr {
-		if fieldType.Elem() == matchWith {
-			return true
-		}
-	} else if fieldType == matchWith {
-		return true
+		return unwrapPointedFieldType(fieldType.Elem())
 	}
-	return false
+	return fieldType
 }
 
 func findBaseTypeFieldTag(baseType reflect.Type, matchWith reflect.Type) (index int, tag reflect.StructTag) {
