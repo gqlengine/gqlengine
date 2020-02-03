@@ -92,9 +92,10 @@ func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*gr
 	engine.types[info.baseType] = intf
 
 	fieldsConfig := objectFieldLazyConfig{
-		fields: map[string]*objectField{},
+		fields:     map[string]*objectField{},
+		pluginData: map[string]interface{}{},
 	}
-	err = engine.objectFields(info.baseType, &fieldsConfig, true)
+	err = engine.unwrapObjectFields(info.baseType, &fieldsConfig, true, 0)
 	if err != nil {
 		return nil, &info, fmt.Errorf("check interface '%s' failed: %E", info.baseType.Name(), err)
 	}

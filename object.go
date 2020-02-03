@@ -73,10 +73,39 @@ type objectField struct {
 }
 
 type objectFieldLazyConfig struct {
-	fields map[string]*objectField
+	fields     map[string]*objectField
+	pluginData map[string]interface{}
+	pluginErr  map[string][]error
 }
 
-func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLazyConfig, asInterface bool) error {
+func (c *objectFieldLazyConfig) addPluginError(name string, err error) {
+	if c.pluginErr == nil {
+		c.pluginErr = map[string][]error{}
+	}
+	c.pluginErr[name] = append(c.pluginErr[name], err)
+}
+
+func (engine *Engine) callPluginsOnCheckingObject(config *objectFieldLazyConfig, asInterface bool, do func(pluginData interface{}, plugin Plugin) error) {
+	if asInterface {
+		return
+	}
+	engine.callPluginsSafely(func(name string, plugin Plugin) error {
+		return do(config.pluginData[name], plugin)
+	}, func(name string, err error) {
+		config.addPluginError(name, err)
+	})
+}
+
+func (engine *Engine) prepareObjectPlugin(c *objectFieldLazyConfig, baseType reflect.Type) {
+	engine.callPluginsSafely(func(name string, plugin Plugin) error {
+		c.pluginData[name] = plugin.BeforeCheckObjectStruct(baseType)
+		return nil
+	}, func(name string, err error) {
+		c.addPluginError(name, err)
+	})
+}
+
+func (engine *Engine) unwrapObjectFields(baseType reflect.Type, config *objectFieldLazyConfig, asInterface bool, depth int) error {
 	for i := 0; i < baseType.NumField(); i++ {
 		f := baseType.Field(i)
 
@@ -89,6 +118,13 @@ func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLaz
 		if !asInterface && isMatchedFieldType(f.Type, _isGraphQLObjectType) {
 			continue
 		}
+		if isEmptyStructField(&f) {
+			// check tag
+			engine.callPluginsOnCheckingObject(config, asInterface, func(pluginData interface{}, plugin Plugin) error {
+				return plugin.CheckObjectEmbeddedFieldTags(pluginData, &f)
+			})
+			continue
+		}
 
 		if f.Anonymous {
 			// embedded
@@ -99,7 +135,7 @@ func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLaz
 			if embeddedInfo.array {
 				return fmt.Errorf("embedded object type should be struct")
 			}
-			err = engine.objectFields(embeddedInfo.baseType, config, false)
+			err = engine.unwrapObjectFields(embeddedInfo.baseType, config, false, depth+1)
 			if err != nil {
 				return err
 			}
@@ -114,12 +150,16 @@ func (engine *Engine) objectFields(baseType reflect.Type, config *objectFieldLaz
 			panic(fmt.Errorf("unsupported field type: %s", f.Type.String()))
 		}
 
-		config.fields[fieldName(&f)] = &objectField{
+		field := &objectField{
 			typ:        fieldType,
 			desc:       desc(&f),
 			deprecated: deprecatedReason(&f),
 			field:      f,
 		}
+		engine.callPluginsOnCheckingObject(config, asInterface, func(pluginData interface{}, plugin Plugin) error {
+			return plugin.CheckObjectField(pluginData, field.name, field.typ, &f.Tag, f.Type)
+		})
+		config.fields[fieldName(&f)] = field
 	}
 	return nil
 }
@@ -325,9 +365,11 @@ func (engine *Engine) collectObject(info *unwrappedInfo, tag *reflect.StructTag)
 	}
 
 	fieldsConfig := objectFieldLazyConfig{
-		fields: map[string]*objectField{},
+		fields:     map[string]*objectField{},
+		pluginData: map[string]interface{}{},
 	}
-	if err := engine.objectFields(baseType, &fieldsConfig, false); err != nil {
+	engine.prepareObjectPlugin(&fieldsConfig, baseType)
+	if err := engine.unwrapObjectFields(baseType, &fieldsConfig, false, 0); err != nil {
 		return nil, err
 	}
 	if prototype != nil {
@@ -375,7 +417,22 @@ func (engine *Engine) collectObject(info *unwrappedInfo, tag *reflect.StructTag)
 		Fields:      fieldsConfig.makeLazyField(info.baseType, engine),
 		Interfaces:  intfs,
 	})
+
+	engine.callPluginOnMethod(info.implType, func(method reflect.Method, prototype reflect.Value) {
+		engine.callPluginsOnCheckingObject(&fieldsConfig, false, func(pluginData interface{}, plugin Plugin) error {
+			return plugin.MatchAndCallObjectMethod(pluginData, method, prototype)
+		})
+	})
+
 	engine.types[info.baseType] = object
+
+	engine.callPluginsOnCheckingObject(&fieldsConfig, false, func(pluginData interface{}, plugin Plugin) error {
+		return plugin.AfterCheckObjectStruct(pluginData, object)
+	})
+
+	if len(fieldsConfig.pluginErr) > 0 {
+		// fixme: handle plugin error
+	}
 
 	return object, nil
 }

@@ -39,6 +39,8 @@ type Engine struct {
 	reqCtx       map[reflect.Type]reflect.Type
 	respCtx      map[reflect.Type]reflect.Type
 
+	plugins []pluginWrapper
+
 	resultCheckers        []resolveResultChecker
 	inputFieldCheckers    []fieldChecker
 	objFieldCheckers      []fieldChecker
@@ -193,7 +195,7 @@ func (engine *Engine) AddQuery(resolve interface{}, name string, description str
 			Fields: graphql.Fields{},
 		})
 	}
-	resolver, err := engine.analysisResolver("", resolve)
+	resolver, err := engine.analysisResolver(resolve, name, true)
 	if err != nil {
 		return err
 	}
@@ -273,7 +275,7 @@ func (engine *Engine) AddMutation(resolve interface{}, name string, description 
 			Fields: graphql.Fields{},
 		})
 	}
-	resolver, err := engine.analysisResolver("", resolve)
+	resolver, err := engine.analysisResolver(resolve, name, false)
 	if err != nil {
 		return err
 	}

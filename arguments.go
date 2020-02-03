@@ -64,15 +64,40 @@ func (a argumentsBuilder) build(params graphql.ResolveParams) (reflect.Value, er
 type fieldChecker func(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error)
 
 type argsLazyConfig struct {
-	args graphql.FieldConfigArgument
+	args       graphql.FieldConfigArgument
+	pluginData map[string]interface{}
+	pluginErr  map[string][]error
 }
 
-func (engine *Engine) unwrapArgsFields(baseType reflect.Type, config *argsLazyConfig) error {
+func (c *argsLazyConfig) addPluginError(name string, err error) {
+	if c.pluginErr == nil {
+		c.pluginErr = map[string][]error{}
+	}
+	c.pluginErr[name] = append(c.pluginErr[name], err)
+}
+
+func (engine *Engine) callPluginsOnCheckingArguments(config *argsLazyConfig, do func(pluginData interface{}, plugin Plugin) error) {
+	engine.callPluginsSafely(func(name string, plugin Plugin) error {
+		return do(config.pluginData[name], plugin)
+	}, func(name string, err error) {
+		config.addPluginError(name, err)
+	})
+}
+
+func (engine *Engine) unwrapArgsFields(baseType reflect.Type, config *argsLazyConfig, depth int) error {
 	for i := 0; i < baseType.NumField(); i++ {
 		f := baseType.Field(i)
 		if isIgnored(&f) || isMatchedFieldType(f.Type, _isGraphQLArguments) {
 			continue
 		}
+
+		if isEmptyStructField(&f) {
+			engine.callPluginsOnCheckingArguments(config, func(pluginData interface{}, plugin Plugin) error {
+				return plugin.CheckArgumentsEmbeddedField(baseType, &f)
+			})
+			continue
+		}
+
 		if f.Anonymous {
 			// embedded
 			embeddedInfo, err := unwrap(f.Type)
@@ -82,7 +107,7 @@ func (engine *Engine) unwrapArgsFields(baseType reflect.Type, config *argsLazyCo
 			if embeddedInfo.array {
 				return fmt.Errorf("embedded arguments type should be struct, not slice")
 			}
-			err = engine.unwrapArgsFields(embeddedInfo.baseType, config)
+			err = engine.unwrapArgsFields(embeddedInfo.baseType, config, depth+1)
 			if err != nil {
 				return err
 			}
@@ -103,26 +128,50 @@ func (engine *Engine) unwrapArgsFields(baseType reflect.Type, config *argsLazyCo
 			return err
 		}
 
-		config.args[name] = &graphql.ArgumentConfig{
+		af := &graphql.ArgumentConfig{
 			Type:         gType,
 			DefaultValue: value,
 			Description:  desc(&f),
 		}
+
+		engine.callPluginsOnCheckingArguments(config, func(pluginData interface{}, plugin Plugin) error {
+			return plugin.CheckArgument(pluginData, name, gType, &f.Tag, f.Type, value)
+		})
+
+		config.args[name] = af
 	}
 	return nil
 }
 
-func (engine *Engine) collectFieldArgumentConfig(baseType reflect.Type) (graphql.FieldConfigArgument, error) {
+func (engine *Engine) collectFieldArgumentConfig(baseType, implType reflect.Type) (graphql.FieldConfigArgument, error) {
 	if _, ok := engine.argConfigs[baseType]; ok {
 		return nil, nil
 	}
 	config := argsLazyConfig{
-		args: graphql.FieldConfigArgument{},
+		args:       graphql.FieldConfigArgument{},
+		pluginData: map[string]interface{}{},
 	}
-	if err := engine.unwrapArgsFields(baseType, &config); err != nil {
+	engine.callPluginsSafely(func(name string, plugin Plugin) error {
+		config.pluginData[name] = plugin.BeforeCheckArgumentsStruct(baseType)
+		return nil
+	}, func(name string, err error) {
+		config.addPluginError(name, err)
+	})
+	if err := engine.unwrapArgsFields(baseType, &config, 0); err != nil {
 		return nil, err
 	}
-	engine.argConfigs[baseType] = config.args
+
+	engine.callPluginOnMethod(implType, func(method reflect.Method, prototype reflect.Value) {
+		engine.callPluginsOnCheckingArguments(&config, func(pluginData interface{}, plugin Plugin) error {
+			return plugin.MatchAndCallArgumentsMethod(pluginData, method, prototype)
+		})
+	})
+
+	args := config.args
+	engine.callPluginsOnCheckingArguments(&config, func(pluginData interface{}, plugin Plugin) error {
+		return plugin.AfterCheckArgumentsStruct(pluginData)
+	})
+	engine.argConfigs[baseType] = args
 	return config.args, nil
 }
 
@@ -144,7 +193,7 @@ func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, *unwrapp
 			return nil, &info, nil
 		}
 	}
-	_, err = engine.collectFieldArgumentConfig(info.baseType)
+	_, err = engine.collectFieldArgumentConfig(info.baseType, info.implType)
 	if err != nil {
 		return nil, &info, err
 	}

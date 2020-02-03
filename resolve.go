@@ -112,7 +112,7 @@ type (
 	resolveResultChecker func(p reflect.Type) (*unwrappedInfo, error)
 )
 
-func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*resolver, error) {
+func (engine *Engine) analysisResolver(resolve interface{}, opName string, query bool) (*resolver, error) {
 	resolveFn := reflect.ValueOf(resolve)
 	resolveFnType := resolveFn.Type()
 	if resolveFnType.Kind() != reflect.Func {
@@ -219,6 +219,15 @@ func (engine *Engine) analysisResolver(fieldName string, resolve interface{}) (*
 		result, ctx, ferr = resolver.buildResults(p.Context, results)
 		return
 	}
+
+	engine.callPluginsSafely(func(name string, plugin Plugin) error {
+		if query {
+			plugin.CheckQueryOperation(opName, resolver.args, resolver.out)
+		} else {
+			plugin.CheckMutationOperation(opName, resolver.args, resolver.out)
+		}
+		return nil
+	}, nil)
 
 	return &resolver, nil
 }

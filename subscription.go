@@ -107,7 +107,7 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 			return nil, fmt.Errorf("more than one arguments object at onSubscribed() arg[%d]: %s", i, in.String())
 		} else if argsBuilder != nil {
 			h.onSubArgs[i] = argsBuilder
-			h.args, err = engine.collectFieldArgumentConfig(info.baseType)
+			h.args, err = engine.collectFieldArgumentConfig(info.baseType, info.implType)
 			if err != nil {
 				return nil, fmt.Errorf("illegal onSubscribed() arguments(%s) object in argument[%d]", in.String(), i)
 			}

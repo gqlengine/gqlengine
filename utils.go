@@ -509,6 +509,23 @@ func getEntryFuncName(fn interface{}) string {
 	return strcase.ToLowerCamel(getFuncName(fn))
 }
 
+func isEmptyStructField(field *reflect.StructField) bool {
+	if field.Type.Kind() == reflect.Struct {
+		numField := field.Type.NumField()
+		if numField == 0 {
+			return true
+		}
+		for i := 0; i < numField; i++ {
+			f := field.Type.Field(i)
+			if !isEmptyStructField(&f) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 func isMatchedFieldType(fieldType reflect.Type, matchWith reflect.Type) bool {
 	if fieldType.Kind() == reflect.Ptr {
 		if fieldType.Elem() == matchWith {

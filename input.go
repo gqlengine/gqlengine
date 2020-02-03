@@ -43,14 +43,38 @@ var (
 )
 
 type inputLazyConfig struct {
-	fields graphql.InputObjectConfigFieldMap
+	fields     graphql.InputObjectConfigFieldMap
+	pluginData map[string]interface{}
+	pluginErr  map[string][]error
 }
 
-func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazyConfig) error {
+func (c *inputLazyConfig) addPluginError(name string, err error) {
+	if c.pluginErr == nil {
+		c.pluginErr = map[string][]error{}
+	}
+	c.pluginErr[name] = append(c.pluginErr[name], err)
+}
+
+func (engine *Engine) callPluginsOnCheckingInputObject(config *inputLazyConfig, do func(pluginData interface{}, plugin Plugin) error) {
+	engine.callPluginsSafely(func(name string, plugin Plugin) error {
+		return do(config.pluginData[name], plugin)
+	}, func(name string, err error) {
+		config.addPluginError(name, err)
+	})
+}
+
+func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazyConfig, depth int) error {
 	for i := 0; i < baseType.NumField(); i++ {
 		f := baseType.Field(i)
 
 		if isIgnored(&f) || isMatchedFieldType(f.Type, _isGraphQLInputType) {
+			continue
+		}
+
+		if isEmptyStructField(&f) {
+			engine.callPluginsOnCheckingInputObject(config, func(pluginData interface{}, plugin Plugin) error {
+				return plugin.CheckInputObjectEmbeddedFieldTags(pluginData, &f)
+			})
 			continue
 		}
 
@@ -62,7 +86,7 @@ func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazy
 			if embeddedInfo.array {
 				return fmt.Errorf("embedded input field type should be struct, not slice")
 			}
-			if err := engine.unwrapInputFields(embeddedInfo.baseType, config); err != nil {
+			if err := engine.unwrapInputFields(embeddedInfo.baseType, config, depth+1); err != nil {
 				return err
 			}
 			continue
@@ -80,11 +104,16 @@ func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazy
 		if err != nil {
 			panic(err)
 		}
-		config.fields[name] = &graphql.InputObjectFieldConfig{
+		fc := &graphql.InputObjectFieldConfig{
 			Description:  desc(&f),
 			Type:         fieldType,
 			DefaultValue: value,
 		}
+
+		engine.callPluginsOnCheckingInputObject(config, func(pluginData interface{}, plugin Plugin) error {
+			return plugin.CheckInputObjectField(pluginData, name, fieldType, &f.Tag, f.Type)
+		})
+		config.fields[name] = fc
 	}
 	return nil
 }
@@ -98,7 +127,18 @@ func (engine *Engine) collectInput(info *unwrappedInfo, tag *reflect.StructTag) 
 	}
 
 	config := inputLazyConfig{fields: graphql.InputObjectConfigFieldMap{}}
-	if err := engine.unwrapInputFields(info.baseType, &config); err != nil {
+
+	engine.callPluginsSafely(func(name string, plugin Plugin) error {
+		if config.pluginData == nil {
+			config.pluginData = map[string]interface{}{}
+		}
+		config.pluginData[name] = plugin.BeforeCheckInputStruct(info.baseType)
+		return nil
+	}, func(name string, err error) {
+		config.addPluginError(name, err)
+	})
+
+	if err := engine.unwrapInputFields(info.baseType, &config, 0); err != nil {
 		return nil, err
 	}
 
@@ -134,11 +174,21 @@ func (engine *Engine) collectInput(info *unwrappedInfo, tag *reflect.StructTag) 
 		}
 	}
 
+	engine.callPluginOnMethod(info.implType, func(method reflect.Method, prototype reflect.Value) {
+		engine.callPluginsOnCheckingInputObject(&config, func(pluginData interface{}, plugin Plugin) error {
+			return plugin.MatchAndCallInputObjectMethod(pluginData, method, prototype)
+		})
+	})
+
 	d := graphql.NewInputObject(graphql.InputObjectConfig{
 		Name:        name,
 		Description: description,
 		Fields:      config.fields,
 		ParseValue:  parseValue,
+	})
+
+	engine.callPluginsOnCheckingInputObject(&config, func(pluginData interface{}, plugin Plugin) error {
+		return plugin.AfterCheckInputStruct(pluginData, d)
 	})
 
 	engine.types[info.baseType] = d
