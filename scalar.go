@@ -41,7 +41,7 @@ var scalarType = reflect.TypeOf((*Scalar)(nil)).Elem()
 
 func (engine *Engine) collectCustomScalar(info *unwrappedInfo) *graphql.Scalar {
 	if s, ok := engine.types[info.baseType]; ok {
-		return s
+		return s.(*graphql.Scalar)
 	}
 
 	scalar := newPrototype(info.implType).(Scalar)

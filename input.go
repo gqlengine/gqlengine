@@ -121,7 +121,7 @@ func (engine *Engine) unwrapInputFields(baseType reflect.Type, config *inputLazy
 func (engine *Engine) collectInput(info *unwrappedInfo, tag *reflect.StructTag) (*graphql.InputObject, error) {
 	if input, ok := engine.types[info.baseType]; ok {
 		if input != nil {
-			return input, nil
+			return input.(*graphql.InputObject), nil
 		}
 		return nil, fmt.Errorf("loop-referred input object %s", info.baseType.String())
 	}
