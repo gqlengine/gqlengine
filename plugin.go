@@ -2,6 +2,7 @@ package gqlengine
 
 import (
 	"reflect"
+	"runtime/debug"
 
 	"github.com/karfield/graphql"
 )
@@ -50,6 +51,9 @@ func (engine *Engine) callPluginsSafely(do func(name string, plugin Plugin) erro
 						if handleError != nil {
 							handleError(wrapper.name, err)
 						}
+					}
+					if engine.opts.Debug {
+						debug.PrintStack()
 					}
 				}
 			}()
