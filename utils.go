@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/iancoleman/strcase"
 
@@ -61,7 +62,12 @@ func defaultValue(field *reflect.StructField) (interface{}, error) {
 	return nil, nil
 }
 
-func isIgnored(field *reflect.StructField) bool { return boolTag(field, "gqlIgnored") }
+func isIgnored(field *reflect.StructField) bool {
+	if !unicode.IsUpper(rune(field.Name[0])) {
+		return true
+	}
+	return boolTag(field, "gqlIgnored")
+}
 
 func fieldName(field *reflect.StructField) string {
 	name := ""
