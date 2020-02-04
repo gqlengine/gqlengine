@@ -221,10 +221,20 @@ func (engine *Engine) analysisResolver(resolve interface{}, opName string, query
 	}
 
 	engine.callPluginsSafely(func(name string, plugin Plugin) error {
+		var (
+			argBaseType reflect.Type
+			outBaseType reflect.Type
+		)
+		if resolver.argsInfo != nil {
+			argBaseType = resolver.argsInfo.baseType
+		}
+		if resolver.outInfo != nil {
+			outBaseType = resolver.outInfo.baseType
+		}
 		if query {
-			plugin.CheckQueryOperation(opName, resolver.argsInfo.baseType, resolver.outInfo.baseType)
+			plugin.CheckQueryOperation(opName, argBaseType, outBaseType)
 		} else {
-			plugin.CheckMutationOperation(opName, resolver.argsInfo.baseType, resolver.outInfo.baseType)
+			plugin.CheckMutationOperation(opName, argBaseType, outBaseType)
 		}
 		return nil
 	}, nil)
