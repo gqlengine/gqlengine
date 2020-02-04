@@ -222,9 +222,9 @@ func (engine *Engine) analysisResolver(resolve interface{}, opName string, query
 
 	engine.callPluginsSafely(func(name string, plugin Plugin) error {
 		if query {
-			plugin.CheckQueryOperation(opName, resolver.args, resolver.out)
+			plugin.CheckQueryOperation(opName, resolver.argsInfo.baseType, resolver.outInfo.baseType)
 		} else {
-			plugin.CheckMutationOperation(opName, resolver.args, resolver.out)
+			plugin.CheckMutationOperation(opName, resolver.argsInfo.baseType, resolver.outInfo.baseType)
 		}
 		return nil
 	}, nil)
