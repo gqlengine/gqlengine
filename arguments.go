@@ -93,7 +93,7 @@ func (engine *Engine) unwrapArgsFields(baseType reflect.Type, config *argsLazyCo
 
 		if isEmptyStructField(&f) {
 			engine.callPluginsOnCheckingArguments(config, func(pluginData interface{}, plugin Plugin) error {
-				return plugin.CheckArgumentsEmbeddedField(baseType, &f)
+				return plugin.CheckArgumentsEmbeddedField(pluginData, &f)
 			})
 			continue
 		}
