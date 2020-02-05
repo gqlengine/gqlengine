@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/karfield/graphql/gqlerrors"
 
@@ -498,6 +499,11 @@ func (engine *Engine) RegisterObject(prototype interface{}) (*graphql.Object, er
 	return engine.registerObject(reflect.TypeOf(prototype))
 }
 
+var (
+	_timeTimeType     = reflect.TypeOf(time.Time{})
+	_timeDurationType = reflect.TypeOf(time.Duration(0))
+)
+
 func (engine *Engine) RegisterType(p reflect.Type) (graphql.Type, error) {
 	if p.NumMethod() > 0 {
 		if _, ok := p.MethodByName("GraphQLObjectDescription"); ok {
@@ -510,6 +516,8 @@ func (engine *Engine) RegisterType(p reflect.Type) (graphql.Type, error) {
 			return engine.registerScalar(p)
 		} else if _, ok := p.MethodByName("GraphQLInterfaceDescription"); ok {
 			return engine.registerInterface(p)
+		} else if _, ok := p.MethodByName("GraphQLID"); ok {
+			return graphql.ID, nil
 		}
 	}
 	if p.Kind() == reflect.Struct {
@@ -520,6 +528,23 @@ func (engine *Engine) RegisterType(p reflect.Type) (graphql.Type, error) {
 		} else if _, ok := p.FieldByName("IsGraphQLInterface"); ok {
 			return engine.registerInterface(p)
 		}
+	} else if p.PkgPath() == "" {
+		switch p.Kind() {
+		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int,
+			reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint:
+			return graphql.Int, nil
+		case reflect.Float32, reflect.Float64:
+			return graphql.Float, nil
+		case reflect.Bool:
+			return graphql.Boolean, nil
+		case reflect.String:
+			return graphql.String, nil
+		}
+	}
+	if p == _timeTimeType {
+		return graphql.DateTime, nil
+	} else if p == _timeDurationType {
+		return Duration, nil
 	}
 	if obj, err := engine.registerObject(p); err == nil || obj != nil {
 		return obj, nil
@@ -531,6 +556,9 @@ func (engine *Engine) RegisterType(p reflect.Type) (graphql.Type, error) {
 		return scalar, nil
 	} else if intf, err := engine.registerInterface(p); err == nil || intf != nil {
 		return intf, nil
+	}
+	if p.Kind() == reflect.Ptr {
+		return engine.RegisterType(p.Elem())
 	}
 	return nil, fmt.Errorf("cannot register as graphql type with prototype: %s", p)
 }
