@@ -485,3 +485,52 @@ func (engine *Engine) asObjectField(field *reflect.StructField) (graphql.Type, *
 	}
 	return wrapType(field, typ, info.array), &info, nil
 }
+
+func (engine *Engine) registerObject(p reflect.Type) (*graphql.Object, error) {
+	typ, _, err := engine.asObject(p)
+	if err != nil {
+		return nil, err
+	}
+	return typ.(*graphql.Object), nil
+}
+
+func (engine *Engine) RegisterObject(prototype interface{}) (*graphql.Object, error) {
+	return engine.registerObject(reflect.TypeOf(prototype))
+}
+
+func (engine *Engine) RegisterType(p reflect.Type) (graphql.Type, error) {
+	if p.NumMethod() > 0 {
+		if _, ok := p.MethodByName("GraphQLObjectDescription"); ok {
+			return engine.registerObject(p)
+		} else if _, ok := p.MethodByName("GraphQLInputDescription"); ok {
+			return engine.registerInput(p)
+		} else if _, ok := p.MethodByName("GraphQLEnumDescription"); ok {
+			return engine.registerEnum(p)
+		} else if _, ok := p.MethodByName("GraphQLScalarDescription"); ok {
+			return engine.registerScalar(p)
+		} else if _, ok := p.MethodByName("GraphQLInterfaceDescription"); ok {
+			return engine.registerInterface(p)
+		}
+	}
+	if p.Kind() == reflect.Struct {
+		if _, ok := p.FieldByName("IsGraphQLObject"); ok {
+			return engine.registerObject(p)
+		} else if _, ok := p.FieldByName("IsGraphQLInput"); ok {
+			return engine.registerInput(p)
+		} else if _, ok := p.FieldByName("IsGraphQLInterface"); ok {
+			return engine.registerInterface(p)
+		}
+	}
+	if obj, err := engine.registerObject(p); err == nil || obj != nil {
+		return obj, nil
+	} else if input, err := engine.registerInput(p); err == nil || input != nil {
+		return input, nil
+	} else if enum, err := engine.registerEnum(p); err == nil || enum != nil {
+		return enum, nil
+	} else if scalar, err := engine.registerScalar(p); err == nil || scalar != nil {
+		return scalar, nil
+	} else if intf, err := engine.registerInterface(p); err == nil || intf != nil {
+		return intf, nil
+	}
+	return nil, fmt.Errorf("cannot register as graphql type with prototype: %s", p)
+}

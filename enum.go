@@ -92,8 +92,7 @@ func (engine *Engine) asEnumResult(out reflect.Type) (*unwrappedInfo, error) {
 	return &info, nil
 }
 
-func (engine *Engine) RegisterEnum(prototype interface{}) (*graphql.Enum, error) {
-	typ := reflect.TypeOf(prototype)
+func (engine *Engine) registerEnum(typ reflect.Type) (*graphql.Enum, error) {
 	isEnum, info, err := implementsOf(typ, enumType)
 	if err != nil {
 		return nil, err
@@ -102,4 +101,9 @@ func (engine *Engine) RegisterEnum(prototype interface{}) (*graphql.Enum, error)
 		return nil, nil
 	}
 	return engine.collectEnum(&info), nil
+}
+
+func (engine *Engine) RegisterEnum(prototype interface{}) (*graphql.Enum, error) {
+	typ := reflect.TypeOf(prototype)
+	return engine.registerEnum(typ)
 }

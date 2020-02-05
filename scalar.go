@@ -110,8 +110,7 @@ func (engine *Engine) asCustomScalarResult(out reflect.Type) (*unwrappedInfo, er
 	return &info, nil
 }
 
-func (engine *Engine) RegisterScalar(prototype interface{}) (*graphql.Scalar, error) {
-	typ := reflect.TypeOf(prototype)
+func (engine *Engine) registerScalar(typ reflect.Type) (*graphql.Scalar, error) {
 	isScalar, info, err := implementsOf(typ, scalarType)
 	if err != nil {
 		return nil, err
@@ -120,4 +119,8 @@ func (engine *Engine) RegisterScalar(prototype interface{}) (*graphql.Scalar, er
 		return nil, nil
 	}
 	return engine.collectCustomScalar(&info), nil
+}
+
+func (engine *Engine) RegisterScalar(prototype interface{}) (*graphql.Scalar, error) {
+	return engine.registerScalar(reflect.TypeOf(prototype))
 }

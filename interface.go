@@ -117,3 +117,13 @@ func (engine *Engine) asInterfaceFromPrototype(prototype Interface) (*graphql.In
 	i, _, err := engine.collectInterface(reflect.TypeOf(prototype), prototype)
 	return i, err
 }
+
+func (engine *Engine) registerInterface(p reflect.Type) (*graphql.Interface, error) {
+	i, _, err := engine.collectInterface(p, nil)
+	return i, err
+}
+
+func (engine *Engine) RegisterInterface(prototype Interface) (*graphql.Interface, error) {
+	i, _, err := engine.collectInterface(reflect.TypeOf(prototype), prototype)
+	return i, err
+}

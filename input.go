@@ -219,9 +219,8 @@ func (engine *Engine) asInputField(field *reflect.StructField) (graphql.Type, *u
 	return wrapType(field, gtype, info.array), &info, nil
 }
 
-func (engine *Engine) RegisterInput(prototype interface{}) (*graphql.InputObject, error) {
-	typ := reflect.TypeOf(prototype)
-	isInput, info, err := implementsOf(typ, _inputType)
+func (engine *Engine) registerInput(p reflect.Type) (*graphql.InputObject, error) {
+	isInput, info, err := implementsOf(p, _inputType)
 	if err != nil {
 		return nil, err
 	}
@@ -229,4 +228,9 @@ func (engine *Engine) RegisterInput(prototype interface{}) (*graphql.InputObject
 		return nil, nil
 	}
 	return engine.collectInput(&info, nil)
+}
+
+func (engine *Engine) RegisterInput(prototype interface{}) (*graphql.InputObject, error) {
+	typ := reflect.TypeOf(prototype)
+	return engine.registerInput(typ)
 }
