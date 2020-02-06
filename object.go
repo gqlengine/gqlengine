@@ -504,7 +504,7 @@ var (
 	_timeDurationType = reflect.TypeOf(time.Duration(0))
 )
 
-func (engine *Engine) RegisterType(p reflect.Type) (graphql.Type, error) {
+func (engine *Engine) registerType(p reflect.Type) (graphql.Type, error) {
 	if p.NumMethod() > 0 {
 		if _, ok := p.MethodByName("GraphQLObjectDescription"); ok {
 			return engine.registerObject(p)
@@ -558,7 +558,11 @@ func (engine *Engine) RegisterType(p reflect.Type) (graphql.Type, error) {
 		return intf, nil
 	}
 	if p.Kind() == reflect.Ptr {
-		return engine.RegisterType(p.Elem())
+		return engine.registerType(p.Elem())
 	}
 	return nil, fmt.Errorf("cannot register as graphql type with prototype: %s", p)
+}
+
+func (engine *Engine) RegisterType(prototype interface{}) (graphql.Type, error) {
+	return engine.registerType(reflect.TypeOf(prototype))
 }
