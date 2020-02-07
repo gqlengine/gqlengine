@@ -48,10 +48,9 @@ api.go
 package main
 
 type MyInfo struct {
+  gqlengine.IsGraphQLObject `gqlDesc:"my info"`
   SaySomething string
 }
-
-func (info *MyInfo) GraphQLObjectDescription() string { return "an info object" }
 
 func mySimpleQuery() error {
   panic("not implemented")
@@ -114,10 +113,9 @@ open browser, you can get the [playground](http://localhost:9996/api/graphql/pla
   - [x] Scalar reflection
   - [x] Input reflection
   - [x] Arguments reflection
-  - [ ] Directive tags
 - [x] Subscription (Integerates Websocket)
-- [x] Upload
-- [x] ID mapping
+- [x] Multipart Upload (Upload images/files in graphql query)
+- [x] Custom ID
 - [x] Tracing extensions
 - [x] document tags
 - [x] operation hijacking
