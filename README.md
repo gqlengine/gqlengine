@@ -1,5 +1,4 @@
-# *GQLEngine* is most productive solution for making a graphql server
-
+# *GQLEngine* is the best productive solution for implementing a graphql server for highest formance
 
 
 ## Getting started
