@@ -101,16 +101,13 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 	for i := 0; i < subFnType.NumIn(); i++ {
 		in := subFnType.In(i)
 
-		if argsBuilder, info, err := engine.asArguments(in); err != nil {
+		if argsBuilder, argsConfig, _, err := engine.asArguments(in); err != nil {
 			return nil, err
 		} else if h.args != nil {
 			return nil, fmt.Errorf("more than one arguments object at onSubscribed() arg[%d]: %s", i, in.String())
 		} else if argsBuilder != nil {
 			h.onSubArgs[i] = argsBuilder
-			h.args, err = engine.collectFieldArgumentConfig(info.baseType, info.implType)
-			if err != nil {
-				return nil, fmt.Errorf("illegal onSubscribed() arguments(%s) object in argument[%d]", in.String(), i)
-			}
+			h.args = argsConfig
 			continue
 		}
 

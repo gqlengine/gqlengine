@@ -558,3 +558,34 @@ func findBaseTypeFieldTag(baseType reflect.Type, matchWith reflect.Type) (index 
 	}
 	return
 }
+
+func compareGraphqlType(a, b graphql.Type) bool {
+	switch a := a.(type) {
+	case *graphql.List:
+		b, bIsList := b.(*graphql.List)
+		if bIsList {
+			return compareGraphqlType(a.OfType, b.OfType)
+		}
+	case *graphql.NonNull:
+		b, bIsNonNull := b.(*graphql.NonNull)
+		if bIsNonNull {
+			return compareGraphqlType(a.OfType, b.OfType)
+		}
+	default:
+		return a.Name() == b.Name()
+	}
+	return false
+}
+
+func unwrapInterface(p reflect.Type) (bool, reflect.Type) {
+	if p.Kind() == reflect.Interface {
+		return false, p
+	} else if p.Kind() == reflect.Slice {
+		_, t := unwrapInterface(p.Elem())
+		return true, t
+	} else if p.Kind() == reflect.Ptr {
+		return unwrapInterface(p.Elem())
+	} else {
+		return false, nil
+	}
+}

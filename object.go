@@ -71,6 +71,7 @@ type objectField struct {
 	resolver   graphql.ResolveFieldWithContext
 	field      reflect.StructField
 	method     reflect.Method
+	args       graphql.FieldConfigArgument
 }
 
 type objectFieldLazyConfig struct {
@@ -165,12 +166,13 @@ func (engine *Engine) unwrapObjectFields(baseType reflect.Type, config *objectFi
 	return nil
 }
 
-func (c *objectFieldLazyConfig) makeLazyField(obj reflect.Type, engine *Engine) graphql.FieldsThunk {
+func (c *objectFieldLazyConfig) makeLazyField() graphql.FieldsThunk {
 	return func() graphql.Fields {
 		fields := graphql.Fields{}
 		for name, config := range c.fields {
 			f := &graphql.Field{
 				Name:              config.name,
+				Args:              config.args,
 				Description:       config.desc,
 				Type:              config.typ,
 				DeprecationReason: config.deprecated,
@@ -184,38 +186,40 @@ func (c *objectFieldLazyConfig) makeLazyField(obj reflect.Type, engine *Engine) 
 	}
 }
 
-func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Value) (graphql.ResolveFieldWithContext, error) {
+func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Value) (graphql.FieldConfigArgument, graphql.ResolveFieldWithContext, error) {
 	fnType := fn.Type()
 
 	var (
-		args reflect.Type
+		args       reflect.Type
+		argsConfig graphql.FieldConfigArgument
 	)
 	argumentBuilders := make([]resolverArgumentBuilder, fnType.NumIn()-1)
 
 	for i := 1; i < fnType.NumIn(); i++ {
 		in := fnType.In(i)
 		var builder resolverArgumentBuilder
-		if argsBuilder, _, err := engine.asArguments(in); err != nil || argsBuilder != nil {
+		if argsBuilder, fieldArgsConfg, _, err := engine.asArguments(in); err != nil || argsBuilder != nil {
 			if err != nil {
-				return nil, fmt.Errorf("field resolver %s error: %E", fnType, err)
+				return nil, nil, fmt.Errorf("field resolver %s error: %E", fnType, err)
 			}
 			builder = argsBuilder
 			if args != nil {
-				return nil, fmt.Errorf("more than one 'arguments' parameter[%d] in field resolver %s", i, fnType)
+				return nil, nil, fmt.Errorf("more than one 'arguments' parameter[%d] in field resolver %s", i, fnType)
 			}
 			args = in
+			argsConfig = fieldArgsConfg
 		} else if ctxBuilder, err := engine.asContextArgument(in); err != nil || ctxBuilder != nil {
 			if err != nil {
-				return nil, fmt.Errorf("field resolver %s error: %E", fnType, err)
+				return nil, nil, fmt.Errorf("field resolver %s error: %E", fnType, err)
 			}
 			builder = ctxBuilder
 		} else if selBuilder, err := engine.asFieldSelection(in); err != nil || selBuilder != nil {
 			if err != nil {
-				return nil, fmt.Errorf("field resolver %s error: %E", fnType, err)
+				return nil, nil, fmt.Errorf("field resolver %s error: %E", fnType, err)
 			}
 			builder = selBuilder
 		} else {
-			return nil, fmt.Errorf("unsupported argument type [%d]: '%s' in field resolver %s", i, in, fnType)
+			return nil, nil, fmt.Errorf("unsupported argument type [%d]: '%s' in field resolver %s", i, in, fnType)
 		}
 		argumentBuilders[i-1] = builder
 	}
@@ -227,29 +231,29 @@ func (engine *Engine) checkFieldResolver(resultType reflect.Type, fn reflect.Val
 		out := fnType.Out(i)
 		if out == resultType {
 			if resultIdx >= 0 {
-				return nil, fmt.Errorf("duplicated field results[%d] in field resolver %s", i, fnType.String())
+				return nil, nil, fmt.Errorf("duplicated field results[%d] in field resolver %s", i, fnType.String())
 			} else {
 				resultIdx = i
 			}
 		} else if isCtx, _, err := engine.asContextMerger(out); isCtx || err != nil {
 			if err != nil {
-				return nil, fmt.Errorf("field resolver %s error: %E", fnType.String(), err)
+				return nil, nil, fmt.Errorf("field resolver %s error: %E", fnType.String(), err)
 			}
 			if ctxOutIdx >= 0 {
-				return nil, fmt.Errorf("duplicated context out [%d] in field resolver %s", i, fnType.String())
+				return nil, nil, fmt.Errorf("duplicated context out [%d] in field resolver %s", i, fnType.String())
 			} else {
 				ctxOutIdx = i
 			}
 		} else if engine.asErrorResult(out) {
 			if errIdx >= 0 {
-				return nil, fmt.Errorf("duplicated error out [%d] in field resolver %s", i, fnType.String())
+				return nil, nil, fmt.Errorf("duplicated error out [%d] in field resolver %s", i, fnType.String())
 			} else {
 				errIdx = i
 			}
 		}
 	}
 
-	return func(p graphql.ResolveParams) (r interface{}, ctx context.Context, err error) {
+	return argsConfig, func(p graphql.ResolveParams) (r interface{}, ctx context.Context, err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				if engine.opts.Debug {
@@ -316,9 +320,10 @@ func (engine *Engine) checkFieldResolvers(implType reflect.Type, fields *objectF
 
 			if field != nil {
 				// check the method
-				if r, err := engine.checkFieldResolver(field.field.Type, method.Func); err != nil {
+				if args, r, err := engine.checkFieldResolver(field.field.Type, method.Func); err != nil {
 					return err
 				} else {
+					field.args = args
 					field.resolver = r
 					field.method = method
 				}
@@ -415,7 +420,7 @@ func (engine *Engine) collectObject(info *unwrappedInfo, tag *reflect.StructTag)
 	object := graphql.NewObject(graphql.ObjectConfig{
 		Name:        name,
 		Description: desc,
-		Fields:      fieldsConfig.makeLazyField(info.baseType, engine),
+		Fields:      fieldsConfig.makeLazyField(),
 		Interfaces:  intfs,
 	})
 

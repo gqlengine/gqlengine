@@ -46,7 +46,7 @@ type resolver struct {
 	fnPrototype    reflect.Value
 	args           reflect.Type
 	argsInfo       *unwrappedInfo
-	argConfig      graphql.FieldConfigArgument
+	argsConfig     graphql.FieldConfigArgument
 	argBuilders    []resolverArgumentBuilder
 	out            reflect.Type
 	outInfo        *unwrappedInfo
@@ -127,7 +127,7 @@ func (engine *Engine) analysisResolver(resolve interface{}, opName string, query
 	for i := 0; i < resolveFnType.NumIn(); i++ {
 		in := resolveFnType.In(i)
 		var builder resolverArgumentBuilder
-		if argsBuilder, info, err := engine.asArguments(in); err != nil || argsBuilder != nil {
+		if argsBuilder, fieldArgsConfig, info, err := engine.asArguments(in); err != nil || argsBuilder != nil {
 			if err != nil {
 				return nil, err
 			}
@@ -137,6 +137,7 @@ func (engine *Engine) analysisResolver(resolve interface{}, opName string, query
 			}
 			resolver.args = in
 			resolver.argsInfo = info
+			resolver.argsConfig = fieldArgsConfig
 		} else if ctxBuilder, err := engine.asContextArgument(in); err != nil || ctxBuilder != nil {
 			if err != nil {
 				return nil, err

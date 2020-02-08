@@ -35,7 +35,6 @@ type Engine struct {
 	subscription *graphql.Object
 	types        map[reflect.Type]graphql.Type
 	idTypes      map[reflect.Type]struct{}
-	argConfigs   map[reflect.Type]graphql.FieldConfigArgument
 	reqCtx       map[reflect.Type]reflect.Type
 	respCtx      map[reflect.Type]reflect.Type
 
@@ -63,13 +62,12 @@ func NewEngine(options Options) *Engine {
 		options.MultipartParsingBufferSize = DefaultMultipartParsingBufferSize
 	}
 	engine := &Engine{
-		opts:       options,
-		types:      map[reflect.Type]graphql.Type{},
-		idTypes:    map[reflect.Type]struct{}{},
-		argConfigs: map[reflect.Type]graphql.FieldConfigArgument{},
-		reqCtx:     map[reflect.Type]reflect.Type{},
-		respCtx:    map[reflect.Type]reflect.Type{},
-		tags:       map[string]*tagEntries{},
+		opts:    options,
+		types:   map[reflect.Type]graphql.Type{},
+		idTypes: map[reflect.Type]struct{}{},
+		reqCtx:  map[reflect.Type]reflect.Type{},
+		respCtx: map[reflect.Type]reflect.Type{},
+		tags:    map[string]*tagEntries{},
 	}
 	engine.resultCheckers = []resolveResultChecker{
 		asBuiltinScalarResult,
@@ -202,17 +200,13 @@ func (engine *Engine) AddQuery(resolve interface{}, name string, description str
 	if resolver.out == nil {
 		return fmt.Errorf("missing result of resolver")
 	}
-	var args graphql.FieldConfigArgument
-	if resolver.args != nil {
-		args = engine.argConfigs[resolver.argsInfo.baseType]
-	}
 	typ := engine.types[resolver.outInfo.baseType]
 	if resolver.out.Kind() == reflect.Slice {
 		typ = graphql.NewList(typ)
 	}
 	engine.query.AddFieldConfig(name, &graphql.Field{
 		Description: description,
-		Args:        args,
+		Args:        resolver.argsConfig,
 		Type:        typ,
 		Resolve:     resolver.fn,
 	})
@@ -286,13 +280,9 @@ func (engine *Engine) AddMutation(resolve interface{}, name string, description 
 			typ = graphql.NewList(typ)
 		}
 	}
-	var args graphql.FieldConfigArgument
-	if resolver.args != nil {
-		args = engine.argConfigs[resolver.argsInfo.baseType]
-	}
 	engine.mutation.AddFieldConfig(name, &graphql.Field{
 		Description: description,
-		Args:        args,
+		Args:        resolver.argsConfig,
 		Type:        typ,
 		Resolve:     resolver.fn,
 	})

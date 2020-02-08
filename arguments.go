@@ -144,9 +144,6 @@ func (engine *Engine) unwrapArgsFields(baseType reflect.Type, config *argsLazyCo
 }
 
 func (engine *Engine) collectFieldArgumentConfig(baseType, implType reflect.Type) (graphql.FieldConfigArgument, error) {
-	if _, ok := engine.argConfigs[baseType]; ok {
-		return nil, nil
-	}
 	config := argsLazyConfig{
 		args:       graphql.FieldConfigArgument{},
 		pluginData: map[string]interface{}{},
@@ -167,38 +164,36 @@ func (engine *Engine) collectFieldArgumentConfig(baseType, implType reflect.Type
 		})
 	})
 
-	args := config.args
 	engine.callPluginsOnCheckingArguments(&config, func(pluginData interface{}, plugin Plugin) error {
 		return plugin.AfterCheckArgumentsStruct(pluginData)
 	})
-	engine.argConfigs[baseType] = args
 	return config.args, nil
 }
 
-func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, *unwrappedInfo, error) {
+func (engine *Engine) asArguments(arg reflect.Type) (*argumentsBuilder, graphql.FieldConfigArgument, *unwrappedInfo, error) {
 	isArg, info, err := implementsOf(arg, _argumentsType)
 	if err != nil {
-		return nil, &info, err
+		return nil, nil, &info, err
 	}
 	if info.array {
-		return nil, &info, fmt.Errorf("arguments object should not be a slice/array")
+		return nil, nil, &info, fmt.Errorf("arguments object should not be a slice/array")
 	}
 	if !isArg {
 		info, err = unwrap(arg)
 		if err != nil {
-			return nil, &info, err
+			return nil, nil, &info, err
 		}
 		idx, _ := findBaseTypeFieldTag(info.baseType, _isGraphQLArguments)
 		if idx < 0 {
-			return nil, &info, nil
+			return nil, nil, &info, nil
 		}
 	}
-	_, err = engine.collectFieldArgumentConfig(info.baseType, info.implType)
+	args, err := engine.collectFieldArgumentConfig(info.baseType, info.implType)
 	if err != nil {
-		return nil, &info, err
+		return nil, nil, &info, err
 	}
 	return &argumentsBuilder{
 		ptr: arg.Kind() == reflect.Ptr,
 		typ: info.baseType,
-	}, &info, nil
+	}, args, &info, nil
 }
