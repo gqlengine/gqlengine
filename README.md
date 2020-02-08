@@ -107,7 +107,8 @@ open browser, you can get the [playground](http://localhost:9996/api/graphql/pla
 
 - Basic features
   - [x] Object type reflection
-  - [x] Interface reflection
+  - [x] Interface pre-register
+  - [x] Union pre-register
   - [x] Enum reflection
   - [x] Scalar reflection
   - [x] Input reflection
