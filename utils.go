@@ -589,3 +589,32 @@ func unwrapInterface(p reflect.Type) (bool, reflect.Type) {
 		return false, nil
 	}
 }
+
+func unwrapForKind(prototype interface{}, expected reflect.Kind) reflect.Type {
+	if typ, ok := prototype.(reflect.Type); ok {
+		if typ.Kind() == expected {
+			return typ
+		} else if typ.Kind() == reflect.Ptr {
+			return unwrapForKind(typ.Elem(), expected)
+		} else {
+			return nil
+		}
+	} else {
+		return unwrapForKind(reflect.TypeOf(prototype), expected)
+	}
+}
+
+func iterateStructTypeFields(p reflect.Type, iter func(field *reflect.StructField)) {
+	for i := 0; i < p.NumField(); i++ {
+		f := p.Field(i)
+		if f.Anonymous {
+			sf := unwrapForKind(f.Type, reflect.Struct)
+			if sf != nil {
+				iterateStructTypeFields(sf, iter)
+				iter(&f)
+				continue
+			}
+		}
+		iter(&f)
+	}
+}

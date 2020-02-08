@@ -38,7 +38,8 @@ type Engine struct {
 	reqCtx       map[reflect.Type]reflect.Type
 	respCtx      map[reflect.Type]reflect.Type
 
-	plugins []pluginWrapper
+	interfaces map[reflect.Type]interfaceConfig
+	plugins    []pluginWrapper
 
 	resultCheckers        []resolveResultChecker
 	inputFieldCheckers    []fieldChecker

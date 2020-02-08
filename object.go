@@ -38,11 +38,6 @@ type NameAlterableObject interface {
 	GraphQLObjectName() string
 }
 
-type ImplementedObject interface {
-	Object
-	GraphQLObjectInterfaces() []Interface
-}
-
 type ObjectDelegation interface {
 	Object
 	GraphQLObjectDelegation() interface{}
@@ -390,20 +385,6 @@ func (engine *Engine) collectObject(info *unwrappedInfo, tag *reflect.StructTag)
 		return nil, err
 	}
 
-	var intfs graphql.Interfaces
-	if prototype != nil {
-		if impl, ok := prototype.(ImplementedObject); ok {
-			for _, intfPrototype := range impl.GraphQLObjectInterfaces() {
-				intf, err := engine.asInterfaceFromPrototype(intfPrototype)
-				if err != nil {
-					return nil, fmt.Errorf("check type '%s' implemented infterface '%s' failed %E",
-						info.baseType.Name(), reflect.TypeOf(intfPrototype).Name(), err)
-				}
-				intfs = append(intfs, intf)
-			}
-		}
-	}
-
 	desc := ""
 	if prototype != nil {
 		desc = prototype.GraphQLObjectDescription()
@@ -421,7 +402,7 @@ func (engine *Engine) collectObject(info *unwrappedInfo, tag *reflect.StructTag)
 		Name:        name,
 		Description: desc,
 		Fields:      fieldsConfig.makeLazyField(),
-		Interfaces:  intfs,
+		Interfaces:  engine.scanObjectImplementedInterfaces(info),
 	})
 
 	engine.callPluginOnMethod(info.implType, func(method reflect.Method, prototype reflect.Value) {
@@ -520,7 +501,7 @@ func (engine *Engine) registerType(p reflect.Type) (graphql.Type, error) {
 		} else if _, ok := p.MethodByName("GraphQLScalarDescription"); ok {
 			return engine.registerScalar(p)
 		} else if _, ok := p.MethodByName("GraphQLInterfaceDescription"); ok {
-			return engine.registerInterface(p)
+			return nil, fmt.Errorf("using PreRegisterInterfacePrototype() to register interface")
 		} else if _, ok := p.MethodByName("GraphQLID"); ok {
 			return graphql.ID, nil
 		}
@@ -531,7 +512,7 @@ func (engine *Engine) registerType(p reflect.Type) (graphql.Type, error) {
 		} else if _, ok := p.FieldByName("IsGraphQLInput"); ok {
 			return engine.registerInput(p)
 		} else if _, ok := p.FieldByName("IsGraphQLInterface"); ok {
-			return engine.registerInterface(p)
+			return nil, fmt.Errorf("using PreRegisterInterfacePrototype() to register interface")
 		}
 	} else if p.PkgPath() == "" {
 		switch p.Kind() {
@@ -559,8 +540,6 @@ func (engine *Engine) registerType(p reflect.Type) (graphql.Type, error) {
 		return enum, nil
 	} else if scalar, err := engine.registerScalar(p); err == nil || scalar != nil {
 		return scalar, nil
-	} else if intf, err := engine.registerInterface(p); err == nil || intf != nil {
-		return intf, nil
 	}
 	if p.Kind() == reflect.Ptr {
 		return engine.registerType(p.Elem())

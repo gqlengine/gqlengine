@@ -32,98 +32,92 @@ type NameAlterableInterface interface {
 
 type IsGraphQLInterface struct{}
 
-var (
-	_interfaceType          = reflect.TypeOf((*Interface)(nil)).Elem()
-	_isGraphQLInterfaceType = reflect.TypeOf(IsGraphQLInterface{})
-)
+var _isGraphQLInterfaceType = reflect.TypeOf(IsGraphQLInterface{})
 
-func (engine *Engine) collectInterface(p reflect.Type, prototype Interface) (*graphql.Interface, *unwrappedInfo, error) {
-	isInterface, info, err := implementsOf(p, _interfaceType)
-	if err != nil {
-		return nil, &info, err
+type interfaceConfig struct {
+	model     reflect.Type
+	prototype interface{}
+	typ       *graphql.Interface
+}
+
+func (engine *Engine) PreRegisterInterface(interfacePrototype, modelPrototype interface{}) error {
+	interfaceType := unwrapForKind(interfacePrototype, reflect.Interface)
+	if interfaceType == nil {
+		return fmt.Errorf("PreRegisterInterfacePrototype(): first argument should be an interface")
 	}
-	var tag *reflect.StructTag
-	if !isInterface {
-		info, err = unwrap(p)
-		if err != nil {
-			return nil, &info, err
-		}
-		idx, t := findBaseTypeFieldTag(info.baseType, _isGraphQLInterfaceType)
-		if idx < 0 {
-			return nil, &info, nil
-		}
-		tag = &t
+	modelType := unwrapForKind(modelPrototype, reflect.Struct)
+	if modelType == nil {
+		return fmt.Errorf("PreRegisterInterfacePrototype(): second argument should be a struct")
 	}
 
-	if i, ok := engine.types[info.baseType]; ok {
-		return i.(*graphql.Interface), &info, nil
+	if _, ok := engine.interfaces[interfaceType]; ok {
+		return nil
 	}
 
-	if tag == nil && prototype == nil {
-		prototype = newPrototype(info.implType).(Interface)
-	}
-
-	name := info.baseType.Name()
-	if prototype != nil {
-		if p, ok := prototype.(NameAlterableInterface); ok {
-			name = p.GraphQLInterfaceName()
-		}
-	}
-
+	name := interfaceType.Name()
 	description := ""
-	if prototype != nil {
-		description = prototype.GraphQLInterfaceDescription()
-	}
-	if tag != nil {
-		if s := tag.Get(gqlName); s != "" {
-			name = s
+	if ifPp, ok := modelPrototype.(Interface); ok {
+		description = ifPp.GraphQLInterfaceDescription()
+		if ifPp, ok := ifPp.(NameAlterableInterface); ok {
+			name = ifPp.GraphQLInterfaceName()
 		}
-		if s := tag.Get(gqlDesc); s != "" {
-			description = s
-		}
+	} else {
+		iterateStructTypeFields(modelType, func(field *reflect.StructField) {
+			if isMatchedFieldType(field.Type, _isGraphQLInterfaceType) {
+				if s := field.Tag.Get(gqlName); s != "" {
+					name = s
+				}
+				description = field.Tag.Get(gqlDesc)
+			}
+		})
 	}
 
 	intf := graphql.NewInterface(graphql.InterfaceConfig{
 		Name:        name,
-		Description: description,
 		Fields:      graphql.Fields{},
+		Description: description,
 	})
 
-	engine.types[info.baseType] = intf
-
-	fieldsConfig := objectFieldLazyConfig{
-		fields:     map[string]*objectField{},
-		pluginData: map[string]interface{}{},
-	}
-	err = engine.unwrapObjectFields(info.baseType, &fieldsConfig, true, 0)
-	if err != nil {
-		return nil, &info, fmt.Errorf("check interface '%s' failed: %E", info.baseType.Name(), err)
+	engine.interfaces[interfaceType] = interfaceConfig{
+		typ:   intf,
+		model: modelType,
 	}
 
-	for name, f := range fieldsConfig.fields {
-		intf.AddFieldConfig(name, &graphql.Field{
-			Name:              f.name,
-			Description:       f.desc,
-			DeprecationReason: f.deprecated,
-			Type:              f.typ,
-			// FIXME: need to support args
-		})
+	return nil
+}
+
+func (engine *Engine) scanObjectImplementedInterfaces(info *unwrappedInfo) (interfaces graphql.Interfaces) {
+	for ifType, ifConfig := range engine.interfaces {
+		if info.implType.Implements(ifType) ||
+			(info.baseType != info.implType && info.baseType.Implements(ifType)) ||
+			(info.ptrType != nil && info.ptrType != info.implType && info.ptrType.Implements(ifType)) {
+			interfaces = append(interfaces, ifConfig.typ)
+		}
 	}
-
-	return intf, &info, nil
+	return
 }
 
-func (engine *Engine) asInterfaceFromPrototype(prototype Interface) (*graphql.Interface, error) {
-	i, _, err := engine.collectInterface(reflect.TypeOf(prototype), prototype)
-	return i, err
-}
+func (engine *Engine) completeInterfaceFields() error {
+	for _, ifConfig := range engine.interfaces {
 
-func (engine *Engine) registerInterface(p reflect.Type) (*graphql.Interface, error) {
-	i, _, err := engine.collectInterface(p, nil)
-	return i, err
-}
+		fieldsConfig := objectFieldLazyConfig{
+			fields:     map[string]*objectField{},
+			pluginData: map[string]interface{}{},
+		}
+		err := engine.unwrapObjectFields(ifConfig.model, &fieldsConfig, true, 0)
+		if err != nil {
+			return fmt.Errorf("check interface '%s' failed: %E", ifConfig.model.Name(), err)
+		}
 
-func (engine *Engine) RegisterInterface(prototype Interface) (*graphql.Interface, error) {
-	i, _, err := engine.collectInterface(reflect.TypeOf(prototype), prototype)
-	return i, err
+		for name, f := range fieldsConfig.fields {
+			ifConfig.typ.AddFieldConfig(name, &graphql.Field{
+				Name:              f.name,
+				Args:              f.args,
+				Description:       f.desc,
+				DeprecationReason: f.deprecated,
+				Type:              f.typ,
+			})
+		}
+	}
+	return nil
 }
