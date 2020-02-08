@@ -82,6 +82,7 @@ func (engine *Engine) PreRegisterInterface(interfacePrototype, modelPrototype in
 		typ:   intf,
 		model: modelType,
 	}
+	engine.types[interfaceType] = intf
 
 	return nil
 }
@@ -120,4 +121,34 @@ func (engine *Engine) completeInterfaceFields() error {
 		}
 	}
 	return nil
+}
+
+func (engine *Engine) asInterfaceResult(p reflect.Type) (*unwrappedInfo, error) {
+	_, intfType := unwrapInterface(p)
+	if intfType == nil {
+		return nil, nil
+	}
+	if _, ok := engine.interfaces[intfType]; ok {
+		return &unwrappedInfo{
+			ptrType:  intfType,
+			implType: intfType,
+			baseType: intfType,
+		}, nil
+	}
+	return nil, nil
+}
+
+func (engine *Engine) asInterfaceField(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
+	array, intfType := unwrapInterface(field.Type)
+	if intfType == nil {
+		return nil, nil, nil
+	}
+	if ifConfig, ok := engine.interfaces[intfType]; ok {
+		return wrapType(field, ifConfig.typ, array), &unwrappedInfo{
+			ptrType:  intfType,
+			implType: intfType,
+			baseType: intfType,
+		}, nil
+	}
+	return nil, nil, nil
 }

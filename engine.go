@@ -63,14 +63,16 @@ func NewEngine(options Options) *Engine {
 		options.MultipartParsingBufferSize = DefaultMultipartParsingBufferSize
 	}
 	engine := &Engine{
-		opts:    options,
-		types:   map[reflect.Type]graphql.Type{},
-		idTypes: map[reflect.Type]struct{}{},
-		reqCtx:  map[reflect.Type]reflect.Type{},
-		respCtx: map[reflect.Type]reflect.Type{},
-		tags:    map[string]*tagEntries{},
+		opts:       options,
+		types:      map[reflect.Type]graphql.Type{},
+		idTypes:    map[reflect.Type]struct{}{},
+		reqCtx:     map[reflect.Type]reflect.Type{},
+		respCtx:    map[reflect.Type]reflect.Type{},
+		tags:       map[string]*tagEntries{},
+		interfaces: map[reflect.Type]interfaceConfig{},
 	}
 	engine.resultCheckers = []resolveResultChecker{
+		engine.asInterfaceResult,
 		asBuiltinScalarResult,
 		engine.asObjectResult,
 		engine.asIdResult,
@@ -86,11 +88,11 @@ func NewEngine(options Options) *Engine {
 		asUploadScalar,
 	}
 	engine.objFieldCheckers = []fieldChecker{
+		engine.asInterfaceField,
 		asBuiltinScalar,
 		engine.asIdField,
 		engine.asEnumField,
 		engine.asObjectField,
-		//engine.asInterfaceField, fixme: add support for interface field
 		engine.asCustomScalarField,
 	}
 	engine.initBuiltinTypes()
@@ -100,6 +102,10 @@ func NewEngine(options Options) *Engine {
 func (engine *Engine) Init() (err error) {
 	if engine.initialized {
 		return
+	}
+
+	if err := engine.completeInterfaceFields(); err != nil {
+		return err
 	}
 
 	if len(engine.chainBuilders) > 0 {
@@ -119,10 +125,16 @@ func (engine *Engine) Init() (err error) {
 		extensions = append(extensions, &tracingExtension{})
 	}
 
+	var types []graphql.Type
+	for _, typ := range engine.types {
+		types = append(types, typ)
+	}
+
 	engine.schema, err = graphql.NewSchema(graphql.SchemaConfig{
 		Query:        engine.query,
 		Mutation:     engine.mutation,
 		Subscription: engine.subscription,
+		Types:        types,
 		Extensions:   extensions,
 	})
 	return
