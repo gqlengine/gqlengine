@@ -39,7 +39,9 @@ type Engine struct {
 	respCtx      map[reflect.Type]reflect.Type
 
 	interfaces map[reflect.Type]interfaceConfig
-	plugins    []pluginWrapper
+	unions     map[reflect.Type]*unionConfig
+
+	plugins []pluginWrapper
 
 	resultCheckers        []resolveResultChecker
 	inputFieldCheckers    []fieldChecker
@@ -62,6 +64,7 @@ func NewEngine(options Options) *Engine {
 	if options.MultipartParsingBufferSize == 0 {
 		options.MultipartParsingBufferSize = DefaultMultipartParsingBufferSize
 	}
+
 	engine := &Engine{
 		opts:       options,
 		types:      map[reflect.Type]graphql.Type{},
@@ -70,15 +73,21 @@ func NewEngine(options Options) *Engine {
 		respCtx:    map[reflect.Type]reflect.Type{},
 		tags:       map[string]*tagEntries{},
 		interfaces: map[reflect.Type]interfaceConfig{},
+		unions:     map[reflect.Type]*unionConfig{},
 	}
+
+	engine.initBuiltinTypes()
+
 	engine.resultCheckers = []resolveResultChecker{
 		engine.asInterfaceResult,
+		engine.asUnionResult,
 		asBuiltinScalarResult,
 		engine.asObjectResult,
 		engine.asIdResult,
 		engine.asEnumResult,
 		engine.asCustomScalarResult,
 	}
+
 	engine.inputFieldCheckers = []fieldChecker{
 		asBuiltinScalar,
 		engine.asIdField,
@@ -87,15 +96,17 @@ func NewEngine(options Options) *Engine {
 		engine.asInputField,
 		asUploadScalar,
 	}
+
 	engine.objFieldCheckers = []fieldChecker{
 		engine.asInterfaceField,
+		engine.asUnionField,
 		asBuiltinScalar,
 		engine.asIdField,
 		engine.asEnumField,
 		engine.asObjectField,
 		engine.asCustomScalarField,
 	}
-	engine.initBuiltinTypes()
+
 	return engine
 }
 
@@ -105,6 +116,10 @@ func (engine *Engine) Init() (err error) {
 	}
 
 	if err := engine.completeInterfaceFields(); err != nil {
+		return err
+	}
+
+	if err := engine.completeUnions(); err != nil {
 		return err
 	}
 

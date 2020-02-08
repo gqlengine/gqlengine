@@ -76,6 +76,19 @@ func (engine *Engine) PreRegisterInterface(interfacePrototype, modelPrototype in
 		Name:        name,
 		Fields:      graphql.Fields{},
 		Description: description,
+		ResolveType: func(p graphql.ResolveTypeParams) *graphql.Object {
+			pt := reflect.TypeOf(p.Value)
+			if pt.Implements(interfaceType) {
+				if info, err := unwrap(pt); err == nil {
+					if typ, ok := engine.types[info.baseType]; ok {
+						if obj, ok := typ.(*graphql.Object); ok {
+							return obj
+						}
+					}
+				}
+			}
+			return nil
+		},
 	})
 
 	engine.interfaces[interfaceType] = interfaceConfig{
