@@ -1,5 +1,8 @@
 # *GQLEngine* is the best productive solution for implementing a graphql server for highest formance
 
+## examples
+
+- starwars: https://github.com/gqlengine/starwars
 
 ## Getting started
 
