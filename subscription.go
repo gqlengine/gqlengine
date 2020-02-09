@@ -37,18 +37,24 @@ var (
 )
 
 func (s *subscriptionFeedback) SendData(data interface{}) error {
-	d, err := unwrap(reflect.TypeOf(data))
+	dt := reflect.TypeOf(data)
+	d, err := unwrap(dt)
 	if err != nil {
 		return fmt.Errorf("send %s only please", s.result.implType)
 	}
 	if d.baseType != s.result.baseType {
-		return fmt.Errorf("send %s only not %s", s.result.baseType, d.baseType)
+		if !d.implType.Implements(s.result.implType) &&
+			!(d.ptrType != d.implType && d.ptrType.Implements(s.result.implType)) &&
+			!(d.baseType != d.implType && d.baseType.Implements(s.result.implType)) {
+			return fmt.Errorf("send %s only not %s", s.result.baseType, d.baseType)
+		}
 	}
 	if d.array != s.result.array {
 		if s.result.array {
-			return fmt.Errorf("requires []%s", s.result.implType)
+			slice := reflect.MakeSlice(reflect.SliceOf(dt), 1, 1)
+			slice.Index(0).Set(reflect.ValueOf(data))
+			data = slice.Interface()
 		}
-		return fmt.Errorf("requires %s not []%s", s.result.implType, s.result.implType)
 	}
 	return s.send(data)
 }
@@ -131,16 +137,6 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 
 	for i := 0; i < subFnType.NumOut(); i++ {
 		out := subFnType.Out(i)
-		if obj, err := engine.asObjectResult(out); err != nil {
-			return nil, err
-		} else if obj != nil {
-			if subBuilder != nil {
-				subBuilder.result = obj
-			}
-			h.result = engine.types[obj.baseType]
-			continue
-		}
-
 		if isSession, _, err := implementsOf(out, subscriptionSessionType); err != nil {
 			return nil, err
 		} else if isSession {
@@ -156,6 +152,16 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 				return nil, fmt.Errorf("more than one error result of onSubscribed(): %s", out)
 			}
 			h.errIdx = i
+			continue
+		}
+
+		if obj, err := engine.asObjectResult(out); err != nil {
+			return nil, err
+		} else if obj != nil {
+			if subBuilder != nil {
+				subBuilder.result = obj
+			}
+			h.result = engine.types[obj.baseType]
 			continue
 		}
 

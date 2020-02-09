@@ -101,7 +101,7 @@ func (engine *Engine) asContextMerger(p reflect.Type) (bool, *unwrappedInfo, err
 }
 
 func (engine *Engine) handleRequestContexts(r *http.Request) (context.Context, error) {
-	ctx := r.Context()
+	ctx := context.Background() // fixme: default is keep alive, need to support maximum time for each link
 	var errs []error
 	for reqCtxType, reqCtxImplType := range engine.reqCtx {
 		req := newPrototype(reqCtxImplType).(RequestContext)
