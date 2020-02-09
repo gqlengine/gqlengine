@@ -42,10 +42,12 @@ var UploadScalar = graphql.NewScalar(graphql.ScalarConfig{
 	},
 })
 
-type Upload *multipart.FileHeader
+type Upload struct {
+	*multipart.FileHeader
+}
 
 var (
-	_uploadType = reflect.ValueOf(Upload(nil)).Type()
+	_uploadType = reflect.ValueOf(Upload{}).Type()
 )
 
 func asUploadScalar(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
@@ -144,8 +146,9 @@ func getFromMultipart(form *multipart.Form) []*RequestOptions {
 			path := v[0]
 			if strings.HasPrefix(path, prefix) {
 				path = strings.TrimPrefix(path, prefix)
-				fh := form.File[k][0]
-				if err := fixVariablesWithJsonPath(opts.Variables, path, Upload(fh)); err != nil {
+				if err := fixVariablesWithJsonPath(opts.Variables, path, Upload{
+					FileHeader: form.File[k][0],
+				}); err != nil {
 					return err
 				}
 			}
