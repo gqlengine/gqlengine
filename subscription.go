@@ -23,6 +23,7 @@ import (
 )
 
 type Subscription interface {
+	Available() bool
 	SendData(data interface{}) error
 	Close() error
 }
@@ -88,6 +89,7 @@ type subscriptionHandler struct {
 	onSubscribedFn   reflect.Value
 	onUnsubscribedFn *reflect.Value
 	errIdx           int
+	resultIdx        int
 	sessionResultIdx int // index of onSubscribed()'s SubscriptionSession result
 	sessionArgIdx    int // index of onUnsubscribed()'s SubscriptionSession Argument
 }
@@ -95,6 +97,7 @@ type subscriptionHandler struct {
 func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed interface{}) (*subscriptionHandler, error) {
 	h := subscriptionHandler{
 		errIdx:           -1,
+		resultIdx:        -1,
 		sessionResultIdx: -1,
 		sessionArgIdx:    -1,
 	}
@@ -158,10 +161,14 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 		if obj, err := engine.asObjectResult(out); err != nil {
 			return nil, err
 		} else if obj != nil {
+			if h.resultIdx >= 0 {
+				return nil, fmt.Errorf("more than one result of onSubscribed(): %d", out)
+			}
 			if subBuilder != nil {
 				subBuilder.result = obj
 			}
 			h.result = engine.types[obj.baseType]
+			h.resultIdx = i
 			continue
 		}
 
@@ -204,6 +211,13 @@ func (engine *Engine) checkSubscriptionHandler(onSubscribed, onUnsubscribed inte
 }
 
 func (h *subscriptionHandler) resolve(p graphql.ResolveParams) (interface{}, context.Context, error) {
+	if data := p.Context.Value(wsDataKey{}); data != nil {
+		if _, ok := data.(nilData); ok {
+			return nil, p.Context, nil
+		}
+		return data, p.Context, nil
+	}
+
 	args := make([]reflect.Value, len(h.onSubArgs))
 	if len(h.onSubArgs) > 0 {
 		for i, arg := range h.onSubArgs {
@@ -228,8 +242,17 @@ func (h *subscriptionHandler) resolve(p graphql.ResolveParams) (interface{}, con
 		session = results[h.sessionResultIdx]
 	}
 
-	return nil, context.WithValue(p.Context, subSetupCtxKey{}, &subInitResult{
-		err: err,
+	var result interface{}
+	if h.resultIdx >= 0 {
+		r := results[h.resultIdx]
+		if r.CanInterface() {
+			result = r.Interface()
+		}
+	}
+
+	return result, context.WithValue(p.Context, subSetupCtxKey{}, &subInitResult{
+		err:       err,
+		hasResult: result != nil,
 		finalize: func() {
 			if h.onUnsubscribedFn != nil {
 				if nArgs := h.onUnsubscribedFn.Type().NumIn(); nArgs > 0 {

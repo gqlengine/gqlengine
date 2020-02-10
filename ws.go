@@ -53,13 +53,28 @@ type wsMessage struct {
 }
 
 type wsCtxKey struct{}
+type wsDataKey struct{}
+
+type nilData struct{}
+
 type subscriptionFeedback struct {
-	id       string
-	mu       sync.Mutex
-	encoder  *json.Encoder
-	finalize func()
-	result   *unwrappedInfo
-	w        *wsutil.Writer
+	engine         *Engine
+	id             string
+	mu             sync.Mutex
+	encoder        *json.Encoder
+	finalize       func()
+	result         *unwrappedInfo
+	w              *wsutil.Writer
+	originalCtx    context.Context
+	requestString  string
+	operationName  string
+	variableValues map[string]interface{}
+}
+
+func (s *subscriptionFeedback) Available() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.encoder != nil
 }
 
 func (s *subscriptionFeedback) close() {
@@ -74,26 +89,36 @@ func (s *subscriptionFeedback) close() {
 
 type subSetupCtxKey struct{}
 type subInitResult struct {
-	err      error
-	finalize func()
+	err       error
+	hasResult bool
+	finalize  func()
 }
 
 func (s *subscriptionFeedback) send(data interface{}) error {
-	payload, err := json.Marshal(data)
+	if data == nil {
+		data = nilData{}
+	}
+	result, _ := graphql.Do(graphql.Params{
+		Context:        context.WithValue(s.originalCtx, wsDataKey{}, data),
+		Schema:         s.engine.schema,
+		RequestString:  s.requestString,
+		OperationName:  s.operationName,
+		VariableValues: s.variableValues,
+	})
+	jsonData, err := json.Marshal(result)
 	if err != nil {
 		return err
+	}
+	msg := wsMessage{
+		ID:      s.id,
+		Type:    gqlData,
+		Payload: jsonData,
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	if s.encoder != nil {
-		err = s.encoder.Encode(wsMessage{
-			ID:      s.id,
-			Type:    gqlData,
-			Payload: payload,
-		})
-		if err != nil {
+		if err := s.encoder.Encode(msg); err != nil {
 			return err
 		}
 		return s.w.Flush()
@@ -114,6 +139,7 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 		_ = conn.Close()
 	}()
 
+loop:
 	for {
 		r := wsutil.NewReader(conn, ws.StateServerSide)
 		decoder := json.NewDecoder(r)
@@ -166,13 +192,8 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 				}
 			}
 
-			err = encoder.Encode(wsMessage{
-				Type: gqlConnectionAck,
-			})
-			if err != nil {
-				//message(gqlConnectionError, err.Error()))
-				return
-			}
+			_ = message(gqlConnectionAck, nil)
+			_ = message(gqlConnectionKeepAlive, nil)
 
 		case gqlConnectionTerminate:
 			return
@@ -189,9 +210,14 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 			}
 
 			fb := &subscriptionFeedback{
-				id:      op.ID,
-				encoder: encoder,
-				w:       w,
+				engine:         engine,
+				id:             op.ID,
+				encoder:        encoder,
+				w:              w,
+				originalCtx:    ctx,
+				requestString:  payload.Query,
+				operationName:  payload.OperationName,
+				variableValues: payload.Variables,
 			}
 			ctx = context.WithValue(ctx, wsCtxKey{}, fb)
 
@@ -203,6 +229,7 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 				VariableValues: payload.Variables,
 			})
 
+			hasResult := false
 			if subCtx := ctx.Value(subSetupCtxKey{}); subCtx != nil {
 				// do nothing
 				r := subCtx.(*subInitResult)
@@ -214,34 +241,53 @@ func (engine *Engine) handleWs(conn net.Conn, ctx context.Context) {
 					mu.Lock()
 					sessions[op.ID] = fb
 					mu.Unlock()
-
-					_ = message(gqlData, nil)
+					hasResult = r.hasResult
 				}
-			} else {
+			}
+
+			if hasResult {
 				_ = encoder.Encode(result)
+				_ = w.Flush()
 			}
 
 		case gqlStop:
 			payload := struct {
 				ID string `json:"id"`
 			}{}
-			if err := json.Unmarshal(op.Payload, &payload); err != nil {
-				_ = message(gqlError, err.Error())
-				continue
+			if op.Payload != nil {
+				if err := json.Unmarshal(op.Payload, &payload); err != nil {
+					_ = message(gqlError, err.Error())
+				}
+			} else {
+				//_ = message(gqlError, "missing payload")
 			}
 
-			mu.Lock()
-			if s, ok := sessions[payload.ID]; ok {
-				s.close()
-				delete(sessions, payload.ID)
-			}
-			mu.Unlock()
+			if payload.ID != "" {
+				mu.Lock()
+				if s, ok := sessions[payload.ID]; ok {
+					s.close()
+					delete(sessions, payload.ID)
+				}
+				mu.Unlock()
 
-			// tell client no more messages from this ID
-			_ = message(gqlComplete, fmt.Sprintf(`{"id": "%s"}`, payload.ID))
+				// tell client no more messages from this ID
+				_ = message(gqlComplete, fmt.Sprintf(`{"id": "%s"}`, payload.ID))
+			} else {
+				break loop
+			}
 
 		default:
 
 		}
+	}
+
+	for _, s := range sessions {
+		var finalize func()
+		s.mu.Lock()
+		if s.finalize != nil {
+			finalize = s.finalize
+			s.finalize = nil
+		}
+		finalize()
 	}
 }
