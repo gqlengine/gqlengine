@@ -91,11 +91,11 @@ func main() {
 
 
 
-以上是最基本的配置，`go run main.go`运行之后，就可以在http://localhost:8000/api/graphql获得graphql api借口了。
+以上是最基本的配置，`go run main.go`运行之后，就可以在http://localhost:8000/api/graphql 获得graphql api了。
 
 
 
-如果你想要类似于swagger的API查看和调试工具，我们不仅有，还提供更好的GraphQL Playground功能，仅需添加另外一个包：
+如果你想要类似于swagger的API查看和调试工具，我们不仅有，还提供更好的GraphQL **Playground**功能，仅需添加另外一个包：
 
 
 
@@ -143,6 +143,4 @@ func main() {
 打开浏览器：http://localhost:9996/api/graphql/playground
 
 
-
-## 商业技术支持请联系 gqlengine@karfield.com
 
