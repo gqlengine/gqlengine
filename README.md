@@ -3,6 +3,7 @@
 ## examples
 
 - starwars: https://github.com/gqlengine/starwars
+- chatbox: https://github.com/gqlengine/chatbox
 
 ## Getting started
 
