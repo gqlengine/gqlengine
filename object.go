@@ -333,6 +333,9 @@ func (engine *Engine) collectObject(info *unwrappedInfo, tag *reflect.StructTag)
 		return obj, nil
 	}
 
+	object := graphql.Object{}
+	engine.types[info.baseType] = &object
+
 	var prototype Object
 	if tag == nil {
 		prototype = newPrototype(info.implType).(Object)
@@ -398,12 +401,14 @@ func (engine *Engine) collectObject(info *unwrappedInfo, tag *reflect.StructTag)
 		}
 	}
 
-	object := graphql.NewObject(graphql.ObjectConfig{
+	if err := graphql.InitObject(&object, graphql.ObjectConfig{
 		Name:        name,
 		Description: desc,
 		Fields:      fieldsConfig.makeLazyField(),
 		Interfaces:  engine.scanObjectImplementedInterfaces(info),
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	engine.callPluginOnMethod(info.implType, func(method reflect.Method, prototype reflect.Value) {
 		engine.callPluginsOnCheckingObject(&fieldsConfig, false, func(pluginData interface{}, plugin Plugin) error {
@@ -411,17 +416,15 @@ func (engine *Engine) collectObject(info *unwrappedInfo, tag *reflect.StructTag)
 		})
 	})
 
-	engine.types[info.baseType] = object
-
 	engine.callPluginsOnCheckingObject(&fieldsConfig, false, func(pluginData interface{}, plugin Plugin) error {
-		return plugin.AfterCheckObjectStruct(pluginData, object)
+		return plugin.AfterCheckObjectStruct(pluginData, &object)
 	})
 
 	if len(fieldsConfig.pluginErr) > 0 {
 		// fixme: handle plugin error
 	}
 
-	return object, nil
+	return &object, nil
 }
 
 func (engine *Engine) asObject(p reflect.Type) (typ graphql.Type, info unwrappedInfo, err error) {

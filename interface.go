@@ -54,6 +54,9 @@ func (engine *Engine) PreRegisterInterface(interfacePrototype, modelPrototype in
 		return nil
 	}
 
+	intf := graphql.Interface{}
+	engine.types[interfaceType] = &intf
+
 	name := interfaceType.Name()
 	description := ""
 	if ifPp, ok := modelPrototype.(Interface); ok {
@@ -72,7 +75,7 @@ func (engine *Engine) PreRegisterInterface(interfacePrototype, modelPrototype in
 		})
 	}
 
-	intf := graphql.NewInterface(graphql.InterfaceConfig{
+	err := graphql.InitInterface(&intf, graphql.InterfaceConfig{
 		Name:        name,
 		Fields:      graphql.Fields{},
 		Description: description,
@@ -90,12 +93,14 @@ func (engine *Engine) PreRegisterInterface(interfacePrototype, modelPrototype in
 			return nil
 		},
 	})
+	if err != nil {
+		return err
+	}
 
 	engine.interfaces[interfaceType] = interfaceConfig{
-		typ:   intf,
+		typ:   &intf,
 		model: modelType,
 	}
-	engine.types[interfaceType] = intf
 
 	return nil
 }

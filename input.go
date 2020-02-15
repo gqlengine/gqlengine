@@ -126,6 +126,9 @@ func (engine *Engine) collectInput(info *unwrappedInfo, tag *reflect.StructTag) 
 		return nil, fmt.Errorf("loop-referred input object %s", info.baseType.String())
 	}
 
+	inputObject := graphql.InputObject{}
+	engine.types[info.baseType] = &inputObject
+
 	config := inputLazyConfig{fields: graphql.InputObjectConfigFieldMap{}}
 
 	engine.callPluginsSafely(func(name string, plugin Plugin) error {
@@ -180,19 +183,21 @@ func (engine *Engine) collectInput(info *unwrappedInfo, tag *reflect.StructTag) 
 		})
 	})
 
-	d := graphql.NewInputObject(graphql.InputObjectConfig{
+	err := graphql.InitInputObject(&inputObject, graphql.InputObjectConfig{
 		Name:        name,
 		Description: description,
 		Fields:      config.fields,
 		ParseValue:  parseValue,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	engine.callPluginsOnCheckingInputObject(&config, func(pluginData interface{}, plugin Plugin) error {
-		return plugin.AfterCheckInputStruct(pluginData, d)
+		return plugin.AfterCheckInputStruct(pluginData, &inputObject)
 	})
 
-	engine.types[info.baseType] = d
-	return d, nil
+	return &inputObject, nil
 }
 
 func (engine *Engine) asInputField(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
