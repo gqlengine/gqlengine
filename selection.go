@@ -2,9 +2,9 @@ package gqlengine
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/karfield/graphql"
-	"github.com/karfield/graphql/language/ast"
 )
 
 type FieldSelection interface {
@@ -14,25 +14,26 @@ type FieldSelection interface {
 var _fieldSelectionType = reflect.TypeOf((*FieldSelection)(nil)).Elem()
 
 type fieldSelectionSet struct {
-	set map[string]*ast.Field
+	*graphql.ResolveInfo
 }
 
 func (f *fieldSelectionSet) IsSelected(fieldNames ...string) bool {
-	if len(fieldNames) == 0 {
-		return false
-	}
-	for _, name := range fieldNames {
-		if _, ok := f.set[name]; ok {
-			return true
+	for i := 0; i < len(fieldNames); i++ {
+		name := fieldNames[i]
+		if strings.HasPrefix(name, f.FieldName) {
+			continue
+		}
+		if !strings.HasPrefix(name, "/") && !strings.HasPrefix(name, "*/") {
+			fieldNames[i] = "*/" + name
 		}
 	}
-	return false
+	return f.IsFieldSelected(fieldNames...)
 }
 
 type fieldSelectionBuilder struct{}
 
 func (f *fieldSelectionBuilder) build(params graphql.ResolveParams) (reflect.Value, error) {
-	var s FieldSelection = &fieldSelectionSet{params.Info.FieldSelectionSet}
+	var s FieldSelection = &fieldSelectionSet{&params.Info}
 	return reflect.ValueOf(s), nil
 }
 
