@@ -46,13 +46,18 @@ type FastResponseContext interface {
 var (
 	_requestContextType  = reflect.TypeOf((*RequestContext)(nil)).Elem()
 	_responseContextType = reflect.TypeOf((*ResponseContext)(nil)).Elem()
+	_contextType         = reflect.TypeOf((*context.Context)(nil)).Elem()
 )
 
 type contextBuilder struct {
 	unwrappedInfo
+	ctx bool
 }
 
 func (c *contextBuilder) build(params graphql.ResolveParams) (reflect.Value, error) {
+	if c.ctx {
+		return reflect.ValueOf(params.Context), nil
+	}
 	ctxVal := params.Context.Value(c.ptrType)
 	if ctxVal == nil {
 		ctxVal = params.Context.Value(c.baseType)
@@ -65,8 +70,17 @@ func (engine *Engine) asContextArgument(p reflect.Type) (*contextBuilder, error)
 	if err != nil {
 		return nil, err
 	}
+	originalCtx := false
 	if !isCtx {
-		return nil, nil
+		info, err = unwrap(p)
+		if err != nil {
+			return nil, err
+		}
+		if info.implType == _contextType || info.baseType == _contextType || info.ptrType == _contextType {
+			originalCtx = true
+		} else {
+			return nil, nil
+		}
 	}
 	if info.array {
 		return nil, fmt.Errorf("context object('%s') should not be a slice/array", p.String())
@@ -78,6 +92,7 @@ func (engine *Engine) asContextArgument(p reflect.Type) (*contextBuilder, error)
 
 	return &contextBuilder{
 		unwrappedInfo: info,
+		ctx:           originalCtx,
 	}, nil
 }
 
