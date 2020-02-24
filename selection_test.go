@@ -42,7 +42,7 @@ func makeSelectionTestContext(funcs map[string]selectionTestFunc) context.Contex
 	return ctx
 }
 
-func TestFieldSelectionSet_IsSelected(t *testing.T) {
+func TestFieldSelectionSet(t *testing.T) {
 	engine := NewEngine(Options{})
 	engine.NewQuery(GetTestObject)
 	if err := engine.Init(); err != nil {
