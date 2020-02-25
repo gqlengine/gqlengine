@@ -470,7 +470,7 @@ func (engine *Engine) asObjectResult(p reflect.Type) (*unwrappedInfo, error) {
 
 func (engine *Engine) asObjectField(field *reflect.StructField) (graphql.Type, *unwrappedInfo, error) {
 	typ, info, err := engine.asObject(field.Type)
-	if err != nil {
+	if err != nil || typ == nil {
 		return nil, &info, err
 	}
 	return wrapType(field, typ, info.array), &info, nil
