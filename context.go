@@ -172,6 +172,9 @@ type contextResultBuilder struct {
 func (c *contextResultBuilder) isResultBuilder() {}
 
 func (engine *Engine) finalizeContexts(ctx context.Context, w http.ResponseWriter) error {
+	if ctx == nil {
+		return nil
+	}
 	var errs []error
 	for ctxType := range engine.respCtx {
 		val := ctx.Value(ctxType)
