@@ -19,16 +19,47 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/karfield/graphql/gqlerrors"
+
 	"github.com/gobwas/ws"
 
 	"github.com/karfield/graphql"
 )
 
+func handleContextError(err error, w http.ResponseWriter) *graphql.Result {
+	if err != nil {
+		if ctxErr, ok := err.(ContextError); ok {
+			w.WriteHeader(ctxErr.StatusCode())
+			return &graphql.Result{
+				Errors: []gqlerrors.FormattedError{{
+					Message:    ctxErr.Error(),
+					Extensions: ctxErr.Extensions(),
+				}},
+			}
+		}
+		if extErr, ok := err.(gqlerrors.ExtendedError); ok {
+			w.WriteHeader(http.StatusBadRequest)
+			return &graphql.Result{
+				Errors: []gqlerrors.FormattedError{{
+					Message:    extErr.Error(),
+					Extensions: extErr.Extensions(),
+				}},
+			}
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		return &graphql.Result{
+			Errors: []gqlerrors.FormattedError{{
+				Message: err.Error(),
+			}},
+		}
+	}
+	return nil
+}
+
 func (engine *Engine) doGraphqlRequest(w http.ResponseWriter, r *http.Request, opt *RequestOptions) *graphql.Result {
 	ctx, err := engine.handleRequestContexts(r)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return nil
+	if r := handleContextError(err, w); r != nil {
+		return r
 	}
 	result, ctx := graphql.Do(graphql.Params{
 		Schema:         engine.schema,
@@ -38,7 +69,9 @@ func (engine *Engine) doGraphqlRequest(w http.ResponseWriter, r *http.Request, o
 		OperationName:  opt.OperationName,
 	})
 	if err := engine.finalizeContexts(ctx, w); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		if r := handleContextError(err, w); r != nil {
+			return r
+		}
 	}
 	return result
 }

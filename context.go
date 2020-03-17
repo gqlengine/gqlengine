@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/karfield/graphql/gqlerrors"
+
 	"github.com/karfield/graphql"
 	"github.com/valyala/fasthttp"
 )
@@ -41,6 +43,11 @@ type ResponseContext interface {
 type FastResponseContext interface {
 	ResponseContext
 	GraphQLContextToFastHTTPResponse(ctx *fasthttp.RequestCtx) error
+}
+
+type ContextError interface {
+	gqlerrors.ExtendedError
+	StatusCode() int
 }
 
 var (
@@ -117,25 +124,13 @@ func (engine *Engine) asContextMerger(p reflect.Type) (bool, *unwrappedInfo, err
 
 func (engine *Engine) handleRequestContexts(r *http.Request) (context.Context, error) {
 	ctx := context.Background() // fixme: default is keep alive, need to support maximum time for each link
-	var errs []error
 	for reqCtxType, reqCtxImplType := range engine.reqCtx {
 		req := newPrototype(reqCtxImplType).(RequestContext)
 		err := req.GraphQLContextFromHTTPRequest(r)
 		if err != nil {
-			errs = append(errs, err)
-			continue
+			return ctx, err
 		}
 		ctx = context.WithValue(ctx, reqCtxType, req)
-	}
-	if len(errs) > 0 {
-		s := "multiple request context handling errors: "
-		for i, err := range errs {
-			if i > 0 {
-				s += ";"
-			}
-			s += err.Error()
-		}
-		return nil, errors.New(s)
 	}
 	return ctx, nil
 }
@@ -175,26 +170,15 @@ func (engine *Engine) finalizeContexts(ctx context.Context, w http.ResponseWrite
 	if ctx == nil {
 		return nil
 	}
-	var errs []error
 	for ctxType := range engine.respCtx {
 		val := ctx.Value(ctxType)
 		if val != nil {
 			respCtx := val.(ResponseContext)
 			err := respCtx.GraphQLContextToHTTPResponse(w)
 			if err != nil {
-				errs = append(errs, err)
+				return err
 			}
 		}
-	}
-	if len(errs) > 0 {
-		s := "finalize contexts errors: "
-		for i, err := range errs {
-			if i > 0 {
-				s += ";"
-			}
-			s += err.Error()
-		}
-		return errors.New(s)
 	}
 	return nil
 }
