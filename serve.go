@@ -68,6 +68,13 @@ func (engine *Engine) doGraphqlRequest(w http.ResponseWriter, r *http.Request, o
 		VariableValues: opt.Variables,
 		OperationName:  opt.OperationName,
 	})
+	if len(result.Errors) > 0 {
+		for _, err := range result.Errors {
+			if r := handleContextError(err, w); r != nil {
+				return r
+			}
+		}
+	}
 	if err := engine.finalizeContexts(ctx, w); err != nil {
 		if r := handleContextError(err, w); r != nil {
 			return r
