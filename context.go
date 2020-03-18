@@ -31,6 +31,11 @@ type RequestContext interface {
 	GraphQLContextFromHTTPRequest(r *http.Request) error
 }
 
+type RequestContextBeforeCalled interface {
+	RequestContext
+	GraphQLCheckErrorBeforeCalled() error
+}
+
 type FastRequestContext interface {
 	RequestContext
 	GraphQLContextFromFastHTTPRequest(ctx *fasthttp.RequestCtx) error
@@ -68,6 +73,13 @@ func (c *contextBuilder) build(params graphql.ResolveParams) (reflect.Value, err
 	ctxVal := params.Context.Value(c.ptrType)
 	if ctxVal == nil {
 		ctxVal = params.Context.Value(c.baseType)
+	}
+	if ctxVal != nil {
+		if ctx, ok := ctxVal.(RequestContextBeforeCalled); ok {
+			if err := ctx.GraphQLCheckErrorBeforeCalled(); err != nil {
+				return reflect.ValueOf(ctxVal), err
+			}
+		}
 	}
 	return reflect.ValueOf(ctxVal), nil
 }
