@@ -26,7 +26,7 @@ import (
 	"github.com/karfield/graphql"
 )
 
-func handleContextError(err error, w http.ResponseWriter) *graphql.Result {
+func handleContextError(err error, w http.ResponseWriter, checkOthers bool) *graphql.Result {
 	if err != nil {
 		if ctxErr, ok := err.(ContextError); ok {
 			w.WriteHeader(ctxErr.StatusCode())
@@ -46,11 +46,13 @@ func handleContextError(err error, w http.ResponseWriter) *graphql.Result {
 				}},
 			}
 		}
-		w.WriteHeader(http.StatusBadRequest)
-		return &graphql.Result{
-			Errors: []gqlerrors.FormattedError{{
-				Message: err.Error(),
-			}},
+		if checkOthers {
+			w.WriteHeader(http.StatusBadRequest)
+			return &graphql.Result{
+				Errors: []gqlerrors.FormattedError{{
+					Message: err.Error(),
+				}},
+			}
 		}
 	}
 	return nil
@@ -58,7 +60,7 @@ func handleContextError(err error, w http.ResponseWriter) *graphql.Result {
 
 func (engine *Engine) doGraphqlRequest(w http.ResponseWriter, r *http.Request, opt *RequestOptions) *graphql.Result {
 	ctx, err := engine.handleRequestContexts(r)
-	if r := handleContextError(err, w); r != nil {
+	if r := handleContextError(err, w, true); r != nil {
 		return r
 	}
 	result, ctx := graphql.Do(graphql.Params{
@@ -70,13 +72,13 @@ func (engine *Engine) doGraphqlRequest(w http.ResponseWriter, r *http.Request, o
 	})
 	if len(result.Errors) > 0 {
 		for _, err := range result.Errors {
-			if r := handleContextError(err, w); r != nil {
+			if r := handleContextError(err, w, false); r != nil {
 				return r
 			}
 		}
 	}
 	if err := engine.finalizeContexts(ctx, w); err != nil {
-		if r := handleContextError(err, w); r != nil {
+		if r := handleContextError(err, w, true); r != nil {
 			return r
 		}
 	}
