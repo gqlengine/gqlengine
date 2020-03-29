@@ -59,17 +59,20 @@ func handleContextError(err error, w http.ResponseWriter, checkOthers bool) *gra
 }
 
 func (engine *Engine) doGraphqlRequest(w http.ResponseWriter, r *http.Request, opt *RequestOptions) *graphql.Result {
-	ctx, err := engine.handleRequestContexts(r)
+	preCtx, err := engine.handleRequestContexts(r)
 	if r := handleContextError(err, w, true); r != nil {
 		return r
 	}
 	result, ctx := graphql.Do(graphql.Params{
 		Schema:         engine.schema,
-		Context:        ctx,
+		Context:        preCtx,
 		RequestString:  opt.Query,
 		VariableValues: opt.Variables,
 		OperationName:  opt.OperationName,
 	})
+	if ctx == nil {
+		ctx = preCtx
+	}
 	if err := engine.finalizeContexts(ctx, w); err != nil {
 		if r := handleContextError(err, w, true); r != nil {
 			return r
