@@ -152,14 +152,15 @@ func (engine *Engine) Init() (err error) {
 		Types:        types,
 		Extensions:   extensions,
 	})
+	engine.initialized = true
 	return
 }
 
-func (engine *Engine) Schema() graphql.Schema {
+func (engine *Engine) Schema() *graphql.Schema {
 	if !engine.initialized {
 		panic("engine not initialized yet!")
 	}
-	return engine.schema
+	return &engine.schema
 }
 
 type chainBuilder interface {
